@@ -9,6 +9,14 @@ import {
 
 export const ABSOLUTE_MAX_CAP = 1250;
 
+/**
+ * Wereldwijde vijand-druk. De speler groeide vroeger sneller dan de
+ * vijand-aantallen, waardoor golven wegsmolten voor ze de speler bereikten.
+ * Deze factor zet de basisgolven omhoog; settings.enemyCountMult blijft
+ * daar bovenop werken zodat de speler zelf kan bijstellen.
+ */
+const ENEMY_PRESSURE_FACTOR = 1.3;
+
 export const STAGE_LENGTH_PRESETS: Array<{ factor: number; label: string; shortLabel: string }> = [
   { factor: 1, label: 'Standaard', shortLabel: '1×' },
   { factor: 2, label: 'Lang', shortLabel: '2×' },
@@ -28,19 +36,19 @@ export function getStageLengthMetrics(factor: number) {
 export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   stageLengthFactor: 1,
   gameSpeed: 1.1,
-  enemyHpMult: 1.35,
-  enemyCountMult: 1.2,
-  enemyMaxGroupSize: 100,
-  goldMult: 1.15,
+  enemyHpMult: 1.3,
+  enemyCountMult: 1.35,
+  enemyMaxGroupSize: 140,
+  goldMult: 1.0,
   startWeapon: 'RIFLE',
   startShield: 0,
   startDrones: 0,
   biomeChoice: 'AUTO',
-  maxSquadCap: 550,
-  purpleGateFreq: 25,
+  maxSquadCap: 300,
+  purpleGateFreq: 15,
   purpleDoubleChance: 55,
-  purpleGateMin: 100,
-  purpleGateMax: 500,
+  purpleGateMin: 75,
+  purpleGateMax: 300,
   miniBossMult: 1.4,
   bossMult: 1.5,
 };
@@ -159,7 +167,8 @@ function computeEnemyCount(
   const [minVar, maxVar] = roleRanges[role];
   const varietyMult = minVar + (maxVar - minVar) * roll;
 
-  const raw = baseCount * levelScale * roadScale * settings.enemyCountMult * varietyMult;
+  const raw =
+    baseCount * ENEMY_PRESSURE_FACTOR * levelScale * roadScale * settings.enemyCountMult * varietyMult;
   const maxCap = isEliteHeavy
     ? Math.max(1, Math.min(settings.enemyMaxGroupSize, Math.round(settings.enemyMaxGroupSize * 0.35)))
     : settings.enemyMaxGroupSize;
@@ -177,7 +186,7 @@ function maybeAppendPurpleGate(
 ) {
   const slotIndex = slotCounter.next++;
   if (settings.purpleGateFreq <= 0) return;
-  if (atDistance - slotCounter.lastPurpleAt < 42) return;
+  if (atDistance - slotCounter.lastPurpleAt < 68) return;
 
   const freqRoll = pseudoRand(stage * 97 + slotIndex * 31 + 3);
   if (freqRoll >= settings.purpleGateFreq / 100) return;
@@ -353,11 +362,21 @@ function appendMiddleBlock(
 
     events.push({
       atDistance: offset + 76,
-      type: 'GATE_PAIR',
-      payload: {
-        left: { op: 'DMG_UP', value: 28, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-        right: { op: 'DIV', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.85 } satisfies GateSpec,
-      },
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.44,
+          count: computeEnemyCount(14, offset + 76, totalUnits, stage, blockIndex * 10 + 24, 'SWARM', settings),
+          hpPerUnit: Math.round(5.6 * s),
+          kind: 'RAIDER',
+        },
+        {
+          x: 0.44,
+          count: computeEnemyCount(4, offset + 76, totalUnits, stage, blockIndex * 10 + 25, 'ELITE', settings, true),
+          hpPerUnit: Math.round(21 * s),
+          kind: 'BRUTE',
+        },
+      ] satisfies EnemySpec[],
     });
   } else if (pattern === 1) {
     // Pattern 1: Pantser-Colonne & Spervuur
@@ -448,12 +467,22 @@ function appendMiddleBlock(
 
     events.push({
       atDistance: offset + 76,
-      type: 'GATE_TRIO',
-      payload: {
-        left: { op: 'DMG_UP', value: 26, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-        center: { op: 'MUL', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.6 } satisfies GateSpec,
-        right: { op: 'RATE_UP', value: 24, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-      },
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.42,
+          count: computeEnemyCount(13, offset + 76, totalUnits, stage, blockIndex * 10 + 26, 'SWARM', settings),
+          hpPerUnit: Math.round(5.8 * s),
+          kind: 'RUSHER',
+          speed: 0.44,
+        },
+        {
+          x: 0.42,
+          count: computeEnemyCount(4, offset + 76, totalUnits, stage, blockIndex * 10 + 27, 'ELITE', settings, true),
+          hpPerUnit: Math.round(20 * s),
+          kind: 'BRUTE',
+        },
+      ] satisfies EnemySpec[],
     });
   } else if (pattern === 2) {
     // Pattern 2: Spervuur-Brug & Zwerm
@@ -499,11 +528,21 @@ function appendMiddleBlock(
 
     events.push({
       atDistance: offset + 37,
-      type: 'GATE_PAIR',
-      payload: {
-        left: { op: 'RATE_UP', value: 28, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-        right: { op: 'ADD', value: -12, shootable: true, shotsPerStep: Math.max(4, Math.round(4.6 * s * 0.5)), moveAmp: slideAmp * 0.5 } satisfies GateSpec,
-      },
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: 0.0,
+          count: computeEnemyCount(16, offset + 37, totalUnits, stage, blockIndex * 10 + 28, 'SWARM', settings),
+          hpPerUnit: Math.round(5.6 * s),
+          kind: 'RAIDER',
+        },
+        {
+          x: -0.46,
+          count: computeEnemyCount(4, offset + 37, totalUnits, stage, blockIndex * 10 + 29, 'ELITE', settings, true),
+          hpPerUnit: Math.round(21 * s),
+          kind: 'BRUTE',
+        },
+      ] satisfies EnemySpec[],
     });
 
     events.push({
@@ -595,13 +634,23 @@ function appendMiddleBlock(
       payload: [{ x: flip ? 0.44 : -0.44, width: 0.96, hp: Math.round(150 * s), damage: dmgBase }] satisfies BarrierSpec[],
     });
     events.push({
-      atDistance: offset + 42,
-      type: 'GATE_TRIO',
-      payload: {
-        left: { op: 'ADD', value: -10, shootable: true, shotsPerStep: Math.max(4, Math.round(4.4 * s * 0.5)) } satisfies GateSpec,
-        center: { op: 'DMG_UP', value: 26, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-        right: { op: 'ADD', value: 10 + stage * 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.55 } satisfies GateSpec,
-      },
+      atDistance: offset + 44,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.45,
+          count: computeEnemyCount(15, offset + 44, totalUnits, stage, blockIndex * 10 + 30, 'SWARM', settings),
+          hpPerUnit: Math.round(5.6 * s),
+          kind: 'RAIDER',
+        },
+        {
+          x: 0.45,
+          count: computeEnemyCount(4, offset + 44, totalUnits, stage, blockIndex * 10 + 31, 'ELITE', settings, true),
+          hpPerUnit: Math.round(22 * s),
+          kind: 'TURRET',
+          speed: 0.17,
+        },
+      ] satisfies EnemySpec[],
     });
 
     events.push({
@@ -865,11 +914,21 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
 
   events.push({
     atDistance: 83,
-    type: 'GATE_PAIR',
-    payload: {
-      left: { op: 'RATE_UP', value: 24, shootable: false, shotsPerStep: 8 } satisfies GateSpec,
-      right: { op: 'DMG_UP', value: 26, shootable: false, shotsPerStep: 8, moveAmp: slideAmp } satisfies GateSpec,
-    },
+    type: 'ENEMIES',
+    payload: [
+      {
+        x: -0.46,
+        count: computeEnemyCount(14, 83, lenCfg.units, stage, 20, 'SWARM', settings),
+        hpPerUnit: Math.round(5.6 * hpScale),
+        kind: 'RAIDER',
+      },
+      {
+        x: 0.46,
+        count: computeEnemyCount(4, 83, lenCfg.units, stage, 21, 'ELITE', settings, true),
+        hpPerUnit: Math.round(22 * hpScale),
+        kind: 'BRUTE',
+      },
+    ] satisfies EnemySpec[],
   });
 
   const miniBossKind: BossEntity['kind'] = variant === 0 ? 'HELI' : variant === 1 ? 'TANK' : 'MECH';
@@ -996,12 +1055,28 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
 
   events.push({
     atDistance: finalOffset + 72,
-    type: 'GATE_TRIO',
-    payload: {
-      left: { op: 'DMG_UP', value: 35, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-      center: { op: 'MUL', value: stage >= 3 ? 3 : 2, shootable: false, shotsPerStep: 12 } satisfies GateSpec,
-      right: { op: 'RATE_UP', value: 30, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
-    },
+    type: 'ENEMIES',
+    payload: [
+      {
+        x: -0.44,
+        count: computeEnemyCount(16, finalOffset + 72, lenCfg.units, stage, 93, 'SWARM', settings),
+        hpPerUnit: Math.round(5.8 * finalScale),
+        kind: 'RAIDER',
+      },
+      {
+        x: 0.0,
+        count: computeEnemyCount(6, finalOffset + 72, lenCfg.units, stage, 94, 'ELITE', settings, true),
+        hpPerUnit: Math.round(21 * finalScale),
+        kind: 'BRUTE',
+      },
+      {
+        x: 0.44,
+        count: computeEnemyCount(5, finalOffset + 72, lenCfg.units, stage, 95, 'SCOUT', settings),
+        hpPerUnit: Math.round(6.6 * finalScale),
+        kind: 'BOMBER',
+        speed: 0.38,
+      },
+    ] satisfies EnemySpec[],
   });
 
   events.push({
@@ -1054,7 +1129,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       kind: bossKind,
       name: bossNames[bossKind],
       hp: Math.round(
-        2200 *
+        1400 *
           Math.pow(1.6, stage - 1) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *

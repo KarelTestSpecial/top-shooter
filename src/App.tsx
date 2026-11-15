@@ -35,7 +35,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
-  settingsVersion: 4,
+  settingsVersion: 5,
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -169,6 +169,19 @@ function loadProgress(): PersistentProgress {
       bossMult = DEFAULT_GAMEPLAY_SETTINGS.bossMult;
     }
 
+    // v5: nieuwe balans. Alleen waarden die nog op de oude standaard stonden
+    // worden meegetrokken; een bewuste eigen instelling blijft behouden.
+    if ((parsed.settingsVersion ?? 1) < 5) {
+      if (maxSquadCap === 550) maxSquadCap = DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap;
+      if (purpleGateFreq === 25) purpleGateFreq = DEFAULT_GAMEPLAY_SETTINGS.purpleGateFreq;
+      if (purpleGateMin === 100) purpleGateMin = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin;
+      if (purpleGateMax === 500) purpleGateMax = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMax;
+      if (enemyCountMult === 1.2) enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
+      if (enemyMaxGroupSize === 100) enemyMaxGroupSize = DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize;
+      if (enemyHpMult === 1.35) enemyHpMult = DEFAULT_GAMEPLAY_SETTINGS.enemyHpMult;
+      if (goldMult === 1.15) goldMult = DEFAULT_GAMEPLAY_SETTINGS.goldMult;
+    }
+
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -200,7 +213,7 @@ function loadProgress(): PersistentProgress {
         miniBossMult,
         bossMult,
       },
-      settingsVersion: 4,
+      settingsVersion: 5,
     };
   } catch {
     return DEFAULT_PROGRESS;

@@ -14,7 +14,7 @@ interface SettingsModalProps {
 const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> = [
   {
     label: 'Standaard Arcade',
-    desc: 'Pit · 110% tempo · 135% HP · 1,5× Bazen',
+    desc: '110% tempo · 130% HP · 135% vijanden · 1,5× Bazen',
     values: DEFAULT_GAMEPLAY_SETTINGS,
   },
   {
@@ -321,7 +321,7 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
                 />
               </div>
               <p className="text-[11px] text-slate-400 leading-snug">
-                Legers variëren per golf (verkenners tot zwermen) en groeien mee met je stage en afgelegde weg tot het ingestelde maximum.
+                Legers variëren per golf (verkenners tot zwermen) en groeien mee met je stage, afgelegde weg én je eigen squad — tot het ingestelde maximum.
               </p>
             </div>
 

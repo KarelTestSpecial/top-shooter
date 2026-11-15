@@ -577,6 +577,7 @@ export class GameEngine {
     } else if (ev.type === 'ENEMIES') {
       const specs = ev.payload as EnemySpec[];
       for (const e of specs) {
+        const hpPerUnit = Math.max(1, Math.round(e.hpPerUnit * this.squadThreatFactor()));
         const spriteCap = Math.min(36, e.count);
         const cols = Math.min(6, Math.ceil(Math.sqrt(spriteCap)));
         const units = Array.from({ length: spriteCap }, (_, i) => {
@@ -595,8 +596,8 @@ export class GameEngine {
           speed: e.speed ?? 0.25,
           count: e.count,
           maxCount: e.count,
-          hpPerUnit: e.hpPerUnit,
-          currentFrontHp: e.hpPerUnit,
+          hpPerUnit,
+          currentFrontHp: hpPerUnit,
           kind: e.kind,
           fireTimer: e.kind === 'TURRET' ? 0.95 : e.kind === 'RAIDER' ? 1.15 + Math.random() * 0.85 : 0,
           flashTimer: 0,
@@ -607,6 +608,7 @@ export class GameEngine {
       const isMini = ev.type === 'MINIBOSS';
       const payload = ev.payload as { kind: BossEntity['kind']; name: string; hp: number; goldReward: number };
       if (!isMini) this.bossSpawned = true;
+      const bossHp = Math.round(payload.hp * this.squadThreatFactor(0.35, 1.35));
       this.boss = {
         id: this.nextEntityId++,
         name: payload.name,
@@ -616,8 +618,8 @@ export class GameEngine {
         z: 0.02,
         targetZ: isMini ? 0.36 : 0.34,
         vx: payload.kind === 'HELI' ? (isMini ? 0.28 : 0.36) : isMini ? 0.22 : 0.28,
-        hp: payload.hp,
-        maxHp: payload.hp,
+        hp: bossHp,
+        maxHp: bossHp,
         flashTimer: 0,
         goldReward: payload.goldReward,
         attackTimer: isMini ? 1.55 : 1.25,
@@ -647,11 +649,11 @@ export class GameEngine {
     this.fireCooldown = interval;
 
     const activeShooters = Math.min(7, Math.max(1, Math.ceil(this.squadCount / 4)));
-    const effectiveSquadPower = Math.pow(this.squadCount, 0.86);
+    const effectiveSquadPower = Math.pow(this.squadCount, 0.7);
     const dmgScale = (effectiveSquadPower / activeShooters) * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus;
     const critChance = Math.min(0.4, this.comboCount * 0.012);
     const isCrit = Math.random() < critChance;
-    const bulletDamage = spec.damage * dmgScale * 0.45 * (this.hyperTimer > 0 ? 1.2 : 1) * (isCrit ? 1.75 : 1);
+    const bulletDamage = spec.damage * dmgScale * 0.5 * (this.hyperTimer > 0 ? 1.2 : 1) * (isCrit ? 1.75 : 1);
 
     this.muzzleFlash = 1;
     sound.playShot(spec.isRocket, this.hyperTimer > 0, spec.isLaser);
@@ -1180,6 +1182,16 @@ export class GameEngine {
     this.spawnFloatingText(proj.x, proj.y - 34, label, '#38BDF8', 1.25);
   }
 
+  /**
+   * Zachte rubber-band: vijanden en bazen schalen mee met de squad die de
+   * speler bij het spawnen heeft. Een grote squad blijft sterk, maar knaagt
+   * niet meer in één kogel een hele golf van 5-HP-soldaten weg.
+   */
+  private squadThreatFactor(exponent = 0.45, cap = 3.6): number {
+    const ratio = Math.max(1, this.squadCount) / 6;
+    return Math.min(cap, Math.max(1, Math.pow(ratio, exponent)));
+  }
+
   private clampSquad(value: number): number {
     return this.currentMaxSquad === null ? value : Math.min(this.currentMaxSquad, value);
   }
@@ -1225,7 +1237,11 @@ export class GameEngine {
       if (b.z >= 0.9 && b.z <= 0.99 && Math.abs(this.playerX - b.x) < b.radius + 0.08) {
         if (b.kind === 'TNT_BARREL') {
           b.destroyed = true;
-          this.absorbOrDamageSquad(5, 'TNT BOEM!', true);
+          this.absorbOrDamageSquad(
+            Math.max(2, Math.min(10, Math.ceil(this.squadCount * 0.15))),
+            'TNT BOEM!',
+            true,
+          );
           this.triggerAoeBlast(b.x, b.z, 70, 0.45, '#EF4444');
         } else {
           const loss = Math.max(2, Math.min(8, Math.ceil(b.hp / 22)));
@@ -1314,7 +1330,7 @@ export class GameEngine {
 
       if (g.z >= 0.91 && g.z <= 1.02 && Math.abs(this.playerX - g.x) < 0.28) {
         if (this.damageCooldown > 0) continue;
-        const maxSingleHit = this.squadCount > 5 ? Math.max(3, Math.ceil(this.squadCount * 0.36)) : g.count;
+        const maxSingleHit = Math.max(2, Math.ceil(this.squadCount * 0.28));
         const baseLoss = g.kind === 'BOMBER' ? Math.max(3, g.count * 2) : g.count;
         const loss = Math.min(maxSingleHit, baseLoss);
         if (g.kind === 'BOMBER') {
@@ -1345,7 +1361,9 @@ export class GameEngine {
 
   private spawnBossReinforcements(boss: BossEntity) {
     const escortCount = Math.max(6, Math.min(28, 6 + this.stage * 2));
-    const unitHp = Math.round(5.5 * Math.pow(1.32, this.stage - 1) * this.difficultyDmgMult);
+    const unitHp = Math.round(
+      5.5 * Math.pow(1.32, this.stage - 1) * this.difficultyDmgMult * this.squadThreatFactor(),
+    );
     for (const sideX of [-0.52, 0.52]) {
       const spriteCap = Math.min(24, escortCount);
       const cols = Math.min(5, Math.ceil(Math.sqrt(spriteCap)));
@@ -1568,9 +1586,9 @@ export class GameEngine {
     const hyperMult = this.hyperTimer > 0 ? 1.55 : 1;
     const effectiveRate = getFireRateMultiplier(this.upgrades) * this.tempFireRateBonus * hyperMult;
     const shotsPerSec = effectiveRate / spec.fireInterval;
-    const effectiveSquadPower = Math.pow(this.squadCount, 0.86);
+    const effectiveSquadPower = Math.pow(this.squadCount, 0.7);
     const dmgPerVolley =
-      effectiveSquadPower * spec.damage * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * 0.45 * (this.hyperTimer > 0 ? 1.2 : 1);
+      effectiveSquadPower * spec.damage * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * 0.5 * (this.hyperTimer > 0 ? 1.2 : 1);
     const droneDps = this.droneCount * 8.5 * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * (1 / 0.34);
     const dps = Math.round(shotsPerSec * dmgPerVolley + droneDps);
 
