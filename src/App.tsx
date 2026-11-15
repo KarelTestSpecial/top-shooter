@@ -35,7 +35,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
-  settingsVersion: 6,
+  settingsVersion: 7,
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -119,6 +119,13 @@ function loadProgress(): PersistentProgress {
       purpleGateFreq = DEFAULT_GAMEPLAY_SETTINGS.purpleGateFreq;
     }
 
+    let purpleDoubleChance = clampNum(
+      saved.purpleDoubleChance,
+      0,
+      100,
+      DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance,
+    );
+
     let purpleGateMin = clampNum(saved.purpleGateMin, 50, 1000, DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin);
     let purpleGateMax = Math.max(
       purpleGateMin,
@@ -188,6 +195,11 @@ function loadProgress(): PersistentProgress {
       if (gameSpeed === 0.9 || gameSpeed === 1.1) gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
     }
 
+    // v7: dubbele paarse poortjes zijn ongewenst; standaard 15% i.p.v. 55%.
+    if ((parsed.settingsVersion ?? 1) < 7) {
+      if (purpleDoubleChance === 55) purpleDoubleChance = DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance;
+    }
+
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -213,13 +225,13 @@ function loadProgress(): PersistentProgress {
         biomeChoice: saved.biomeChoice ?? DEFAULT_GAMEPLAY_SETTINGS.biomeChoice,
         maxSquadCap,
         purpleGateFreq,
-        purpleDoubleChance: clampNum(saved.purpleDoubleChance, 0, 100, DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance),
+        purpleDoubleChance,
         purpleGateMin,
         purpleGateMax,
         miniBossMult,
         bossMult,
       },
-      settingsVersion: 6,
+      settingsVersion: 7,
     };
   } catch {
     return DEFAULT_PROGRESS;

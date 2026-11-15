@@ -46,7 +46,7 @@ export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   biomeChoice: 'AUTO',
   maxSquadCap: 300,
   purpleGateFreq: 15,
-  purpleDoubleChance: 55,
+  purpleDoubleChance: 15,
   purpleGateMin: 75,
   purpleGateMax: 300,
   miniBossMult: 1.4,
