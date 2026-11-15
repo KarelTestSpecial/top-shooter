@@ -1,6 +1,8 @@
 export type GameState = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER';
 
-export type WeaponTier = 'RIFLE' | 'DOUBLE' | 'SPREAD' | 'ROCKET';
+export type StageLengthMode = 'NORMAL' | 'LONG' | 'MARATHON';
+
+export type WeaponTier = 'RIFLE' | 'DOUBLE' | 'SPREAD' | 'ROCKET' | 'LASER';
 
 export interface UpgradeLevels {
   startSquad: number;
@@ -16,6 +18,7 @@ export interface PersistentProgress {
   totalKills: number;
   upgrades: UpgradeLevels;
   muted: boolean;
+  stageLength: StageLengthMode;
 }
 
 export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP';
@@ -23,16 +26,16 @@ export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP';
 export interface GateEntity {
   id: number;
   lane: 'left' | 'right' | 'center';
-  x: number; // normalized -1 to 1
+  x: number;
   baseX: number;
-  width: number; // normalized width (e.g. 0.88)
-  z: number; // 0 (horizon) -> 1 (player line)
+  width: number;
+  z: number;
   op: GateOp;
   value: number;
   shootable: boolean;
   hitProgress: number;
   shotsPerStep: number;
-  moveAmp: number; // horizontal oscillation amplitude
+  moveAmp: number;
   movePhase: number;
   triggered: boolean;
   flashTimer: number;
@@ -43,7 +46,8 @@ export type CrateReward =
   | { type: 'SQUAD'; amount: number }
   | { type: 'WEAPON'; tier: WeaponTier }
   | { type: 'SHIELD'; charges: number }
-  | { type: 'DRONE'; count: number };
+  | { type: 'DRONE'; count: number }
+  | { type: 'TNT'; radius: number; damage: number };
 
 export interface BarrelEntity {
   id: number;
@@ -52,8 +56,20 @@ export interface BarrelEntity {
   radius: number;
   hp: number;
   maxHp: number;
-  kind: 'WOOD' | 'STEEL' | 'WEAPON_CRATE' | 'SQUAD_CRATE' | 'SHIELD_CRATE' | 'DRONE_CRATE';
+  kind: 'WOOD' | 'STEEL' | 'WEAPON_CRATE' | 'SQUAD_CRATE' | 'SHIELD_CRATE' | 'DRONE_CRATE' | 'TNT_BARREL';
   reward: CrateReward;
+  flashTimer: number;
+  destroyed: boolean;
+}
+
+export interface BridgeBarrier {
+  id: number;
+  x: number;
+  width: number;
+  z: number;
+  hp: number;
+  maxHp: number;
+  damage: number;
   flashTimer: number;
   destroyed: boolean;
 }
@@ -73,7 +89,8 @@ export interface EnemyGroup {
   maxCount: number;
   hpPerUnit: number;
   currentFrontHp: number;
-  kind: 'RAIDER' | 'BRUTE';
+  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET';
+  fireTimer: number;
   flashTimer: number;
   units: EnemyUnit[];
 }
@@ -81,6 +98,7 @@ export interface EnemyGroup {
 export interface BossEntity {
   id: number;
   name: string;
+  isMiniBoss: boolean;
   x: number;
   z: number;
   targetZ: number;
@@ -92,7 +110,7 @@ export interface BossEntity {
   goldReward: number;
   attackTimer: number;
   rotorAngle: number;
-  telegraphLaneX: number | null;
+  telegraphLanes: number[];
   telegraphTimer: number;
 }
 
@@ -105,6 +123,14 @@ export interface EnemyHazard {
   radius: number;
 }
 
+export interface AirstrikeMissile {
+  x: number;
+  z: number;
+  yOffset: number;
+  fallSpeed: number;
+  damage: number;
+}
+
 export interface Bullet {
   x: number;
   z: number;
@@ -114,7 +140,10 @@ export interface Bullet {
   vz: number;
   damage: number;
   isRocket: boolean;
+  isLaser?: boolean;
   isDroneLaser?: boolean;
+  pierceLeft: number;
+  hitIds: Set<number>;
   aoeRadius: number;
   color: string;
 }
@@ -167,6 +196,9 @@ export interface HudSnapshot {
   droneCount: number;
   hyperCharge: number; // 0..100
   hyperActive: boolean;
+  airstrikeCharge: number; // 0..100
+  comboCount: number;
+  biomeName: string;
   stage: number;
   stageProgress: number; // 0..1
   runGold: number;
@@ -175,10 +207,12 @@ export interface HudSnapshot {
   bossHp: number | null;
   bossMaxHp: number | null;
   bossName: string | null;
+  bossEnraged: boolean;
+  bossIsMini: boolean;
 }
 
 export interface StageWaveEvent {
   atDistance: number;
-  type: 'GATE_PAIR' | 'SINGLE_GATE' | 'BARRELS' | 'ENEMIES' | 'BOSS';
+  type: 'GATE_PAIR' | 'GATE_TRIO' | 'BARRELS' | 'BARRIER' | 'ENEMIES' | 'MINIBOSS' | 'BOSS';
   payload: unknown;
 }

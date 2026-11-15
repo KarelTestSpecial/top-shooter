@@ -31,7 +31,7 @@ class SoundEngine {
     this.ensureContext();
   }
 
-  playShot(isRocket: boolean, isHyper = false) {
+  playShot(isRocket: boolean, isHyper = false, isLaser = false) {
     const ctx = this.ensureContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -40,19 +40,19 @@ class SoundEngine {
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = isRocket ? 'sawtooth' : 'triangle';
-    const startFreq = isRocket ? 230 : (isHyper ? 660 : 540) + Math.random() * 90;
-    const endFreq = isRocket ? 70 : 165;
+    osc.type = isRocket ? 'sawtooth' : isLaser ? 'sine' : 'triangle';
+    const startFreq = isRocket ? 230 : isLaser ? 880 : (isHyper ? 660 : 540) + Math.random() * 90;
+    const endFreq = isRocket ? 70 : isLaser ? 280 : 165;
     osc.frequency.setValueAtTime(startFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, now + (isRocket ? 0.12 : 0.045));
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + (isRocket ? 0.12 : 0.048));
 
     gain.gain.setValueAtTime(isRocket ? 0.085 : 0.04, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (isRocket ? 0.13 : 0.05));
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isRocket ? 0.13 : 0.052));
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + (isRocket ? 0.14 : 0.055));
+    osc.stop(now + (isRocket ? 0.14 : 0.058));
   }
 
   playHit() {
@@ -114,6 +114,24 @@ class SoundEngine {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.17);
+  }
+
+  playAirstrike() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(95, now + 0.35);
+
+    gain.gain.setValueAtTime(0.11, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.38);
   }
 
   playHyperStart() {

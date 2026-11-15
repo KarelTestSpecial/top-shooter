@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { Crosshair, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { UpgradePanel } from './components/UpgradePanel';
 import { GameEngine, WEAPON_LABELS } from './game/engine';
 import { sound } from './game/sound';
-import { getStartSquadCount, getUpgradeCost } from './game/stages';
-import { GameState, HudSnapshot, PersistentProgress, UpgradeLevels } from './game/types';
+import { getStartSquadCount, getUpgradeCost, STAGE_LENGTH_CONFIG } from './game/stages';
+import { GameState, HudSnapshot, PersistentProgress, StageLengthMode, UpgradeLevels } from './game/types';
 
 const STORAGE_KEY = 'poortrush_progress_v1';
 
@@ -20,6 +20,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
     goldBonus: 0,
   },
   muted: false,
+  stageLength: 'NORMAL',
 };
 
 function loadProgress(): PersistentProgress {
@@ -27,6 +28,8 @@ function loadProgress(): PersistentProgress {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PROGRESS;
     const parsed = JSON.parse(raw) as Partial<PersistentProgress>;
+    const validLength: StageLengthMode =
+      parsed.stageLength === 'LONG' || parsed.stageLength === 'MARATHON' ? parsed.stageLength : 'NORMAL';
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -39,6 +42,7 @@ function loadProgress(): PersistentProgress {
         goldBonus: parsed.upgrades?.goldBonus ?? 0,
       },
       muted: Boolean(parsed.muted),
+      stageLength: validLength,
     };
   } catch {
     return DEFAULT_PROGRESS;
@@ -63,6 +67,9 @@ export default function App() {
     droneCount: 0,
     hyperCharge: 0,
     hyperActive: false,
+    airstrikeCharge: 55,
+    comboCount: 0,
+    biomeName: 'Kustbrug',
     stage: 1,
     stageProgress: 0,
     runGold: 0,
@@ -71,6 +78,8 @@ export default function App() {
     bossHp: null,
     bossMaxHp: null,
     bossName: null,
+    bossEnraged: false,
+    bossIsMini: false,
   }));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -167,6 +176,12 @@ export default function App() {
       } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         keysPressedRef.current.right = true;
         updateDir();
+      } else if (e.code === 'Space') {
+        if (gameState === 'PLAYING') {
+          e.preventDefault();
+          sound.unlock();
+          engineRef.current?.triggerAirstrike();
+        }
       } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
         setGameState((curr) => {
           if (curr === 'PLAYING') {
@@ -198,18 +213,23 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, []);
+  }, [gameState]);
 
   const startStage = useCallback(
-    (stageToPlay: number) => {
+    (stageToPlay: number, lengthOverride?: StageLengthMode) => {
       sound.unlock();
+      const mode = lengthOverride ?? progress.stageLength;
       setSelectedStage(stageToPlay);
       setRunSummary(null);
       setGameState('PLAYING');
-      engineRef.current?.startStage(stageToPlay, progress.upgrades);
+      engineRef.current?.startStage(stageToPlay, progress.upgrades, mode);
     },
-    [progress.upgrades],
+    [progress.upgrades, progress.stageLength],
   );
+
+  const setStageLength = useCallback((mode: StageLengthMode) => {
+    setProgress((prev) => ({ ...prev, stageLength: mode }));
+  }, []);
 
   const togglePause = useCallback(() => {
     if (gameState === 'PLAYING') {
@@ -247,6 +267,8 @@ export default function App() {
     const normX = (rel - 0.5) * 2.15;
     engineRef.current?.setTargetXNormalized(normX);
   };
+
+  const airstrikeReady = hud.airstrikeCharge >= 100;
 
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#090D16] text-slate-100 select-none">
@@ -313,10 +335,10 @@ export default function App() {
             </span>
             <span aria-hidden="true" className="text-slate-600">·</span>
             <span className="text-slate-200 font-medium truncate">{WEAPON_LABELS[hud.weaponTier]}</span>
-            {hud.shieldCharges > 0 && (
+            {hud.comboCount >= 5 && (
               <>
                 <span aria-hidden="true" className="text-slate-600">·</span>
-                <span className="text-cyan-300 font-mono-num whitespace-nowrap">Schild {hud.shieldCharges}</span>
+                <span className="text-yellow-300 font-mono-num font-bold whitespace-nowrap">{hud.comboCount}×</span>
               </>
             )}
           </div>
@@ -353,18 +375,47 @@ export default function App() {
             <canvas ref={canvasRef} className="block h-full w-full" />
           </div>
 
+          {/* Mobile Touch Airstrike Button */}
+          {gameState === 'PLAYING' && (
+            <button
+              type="button"
+              onClick={() => {
+                sound.unlock();
+                engineRef.current?.triggerAirstrike();
+              }}
+              disabled={!airstrikeReady}
+              className={`lg:hidden absolute bottom-3 right-3 flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-xs font-bold shadow-lg transition-colors whitespace-nowrap ${
+                airstrikeReady
+                  ? 'bg-rose-500 text-white hover:bg-rose-400 cursor-pointer'
+                  : 'bg-slate-900/90 text-slate-400 border border-slate-700 cursor-not-allowed'
+              }`}
+            >
+              <Crosshair className="h-4 w-4" />
+              <span>{airstrikeReady ? 'Luchtaanval!' : `${hud.airstrikeCharge}%`}</span>
+            </button>
+          )}
+
           {/* Boss Alert Bar */}
           {gameState === 'PLAYING' && hud.bossHp !== null && hud.bossMaxHp !== null && (
-            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 w-[88%] max-w-md rounded-lg border border-red-500/40 bg-slate-950/90 px-3.5 py-2">
+            <div
+              className={`pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 w-[88%] max-w-md rounded-lg border bg-slate-950/90 px-3.5 py-2 ${
+                hud.bossIsMini ? 'border-amber-500/40' : 'border-red-500/40'
+              }`}
+            >
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-red-400">{hud.bossName}</span>
+                <span className={hud.bossIsMini ? 'text-amber-400' : hud.bossEnraged ? 'text-amber-400' : 'text-red-400'}>
+                  {hud.bossIsMini ? `Mini-Baas · ${hud.bossName}` : hud.bossName}
+                  {hud.bossEnraged ? ' · Woede-Fase' : ''}
+                </span>
                 <span className="font-mono-num text-slate-200">
                   {hud.bossHp} / {hud.bossMaxHp} HP
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
                 <div
-                  className="h-full bg-red-500 transition-[width] duration-75"
+                  className={`h-full transition-[width] duration-75 ${
+                    hud.bossIsMini || hud.bossEnraged ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
                   style={{ width: `${Math.max(0, Math.min(100, (hud.bossHp / hud.bossMaxHp) * 100))}%` }}
                 />
               </div>
@@ -381,18 +432,55 @@ export default function App() {
                     Schuif, Schiet &amp; Vermenigvuldig
                   </h1>
                   <p className="text-sm text-slate-300 leading-relaxed">
-                    Kies de juiste rekenpoortjes, breek wapenkisten, verzamel schilden en drones, en laad Hypervuur op voor 2× goud.
+                    Kies rekenpoortjes, blaas TNT-vaten op voor kettingreacties, upgrade naar het Plasmakanon en roep luchtaanvallen in.
                   </p>
                 </div>
 
                 <div className="space-y-1.5 text-xs text-slate-300 border-t border-b border-slate-800 py-3">
                   <div className="flex items-center justify-between">
                     <span>Besturing</span>
-                    <span className="font-mono-num text-slate-200">Sleep muis/vinger of A / D</span>
+                    <span className="font-mono-num text-slate-200">Muis / Touch of A / D</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Luchtaanval</span>
+                    <span className="font-mono-num text-rose-300">Spatie of tik op knop</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Slimme Truc</span>
                     <span className="text-sky-300">Schiet op rode poortjes om ze positief te maken</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-slate-300">Stage-lengte</span>
+                    <span className="text-slate-400">
+                      {progress.stageLength === 'NORMAL'
+                        ? 'Standaard tempo'
+                        : progress.stageLength === 'LONG'
+                        ? '2× langer · +40% eindbaas goud'
+                        : '3,5× marathon · +85% eindbaas goud'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
+                    {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
+                      const cfg = STAGE_LENGTH_CONFIG[mode];
+                      const active = progress.stageLength === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setStageLength(mode)}
+                          className={`rounded-md px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                            active
+                              ? 'bg-sky-500 text-slate-950'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          {cfg.label} ({cfg.factorLabel})
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -488,6 +576,27 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
+                  {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
+                    const cfg = STAGE_LENGTH_CONFIG[mode];
+                    const active = progress.stageLength === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setStageLength(mode)}
+                        className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                          active
+                            ? 'bg-sky-500 text-slate-950'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {cfg.label} ({cfg.factorLabel})
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
 
                 <div className="flex gap-2.5">
@@ -528,6 +637,27 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
+                  {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
+                    const cfg = STAGE_LENGTH_CONFIG[mode];
+                    const active = progress.stageLength === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setStageLength(mode)}
+                        className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                          active
+                            ? 'bg-sky-500 text-slate-950'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {cfg.label} ({cfg.factorLabel})
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
 
                 <div className="flex gap-2.5">
@@ -547,10 +677,12 @@ export default function App() {
 
         {/* Desktop Tactical Command Panel */}
         <aside className="hidden lg:flex w-80 shrink-0 flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/75 p-5">
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div>
-              <div className="text-xs font-medium text-slate-400">Actieve Stage</div>
-              <div className="mt-1 flex items-baseline justify-between">
+              <div className="text-xs font-medium text-slate-400">
+                {hud.biomeName} · {STAGE_LENGTH_CONFIG[progress.stageLength].label} ({STAGE_LENGTH_CONFIG[progress.stageLength].factorLabel})
+              </div>
+              <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="font-display text-3xl font-extrabold text-white">Stage {hud.stage}</span>
                 <span className="font-mono-num text-xs text-slate-400">{Math.round(hud.stageProgress * 100)}%</span>
               </div>
@@ -563,7 +695,7 @@ export default function App() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between text-xs mb-1.5">
+              <div className="flex items-center justify-between text-xs mb-1">
                 <span className={hud.hyperActive ? 'font-bold text-yellow-300' : 'text-slate-400'}>
                   {hud.hyperActive ? 'Hypervuur Actief (2× Goud)' : 'Hypervuur Lading'}
                 </span>
@@ -577,7 +709,27 @@ export default function App() {
               </div>
             </div>
 
-            <div className="space-y-2.5 border-t border-slate-800 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                sound.unlock();
+                engineRef.current?.triggerAirstrike();
+              }}
+              disabled={gameState !== 'PLAYING' || !airstrikeReady}
+              className={`flex w-full items-center justify-between rounded-lg border px-3.5 py-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
+                gameState === 'PLAYING' && airstrikeReady
+                  ? 'border-rose-400/70 bg-rose-500 text-white hover:bg-rose-400 cursor-pointer'
+                  : 'border-slate-800 bg-slate-950/60 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Crosshair className="h-4 w-4" />
+                <span>Luchtaanval (Spatie)</span>
+              </span>
+              <span className="font-mono-num">{airstrikeReady ? 'KLAAR' : `${hud.airstrikeCharge}%`}</span>
+            </button>
+
+            <div className="space-y-2 border-t border-slate-800 pt-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Soldaten</span>
                 <span className="font-mono-num text-2xl font-bold text-sky-400">{hud.squadCount}</span>
@@ -585,6 +737,10 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Wapen</span>
                 <span className="text-sm font-semibold text-amber-300">{WEAPON_LABELS[hud.weaponTier]}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Combo-Streak</span>
+                <span className="font-mono-num text-sm font-semibold text-yellow-300">{hud.comboCount}×</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Energieschild</span>
@@ -602,20 +758,13 @@ export default function App() {
                 <span className="text-sm text-slate-400">Run Goud</span>
                 <span className="font-mono-num text-sm font-semibold text-amber-400">+{hud.runGold}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Uitgeschakeld</span>
-                <span className="font-mono-num text-sm font-semibold text-slate-200">{hud.kills}</span>
-              </div>
             </div>
           </div>
 
-          <div className="space-y-2.5 border-t border-slate-800 pt-4 text-xs text-slate-400">
-            <div className="font-medium text-slate-300">Besturing &amp; Kratten</div>
+          <div className="space-y-2 border-t border-slate-800 pt-3.5 text-xs text-slate-400">
+            <div className="font-medium text-slate-300">Tactische Tips</div>
             <p className="leading-relaxed">
-              Beweeg met muis/vinger of <strong className="text-slate-200">A / D</strong>. Breek gouden{' '}
-              <strong className="text-amber-300">Wapenkisten</strong>, cyaan{' '}
-              <strong className="text-cyan-300">Schilden</strong> en groene{' '}
-              <strong className="text-emerald-300">Drones</strong>.
+              Schiet rode <strong className="text-red-400">TNT-vaten</strong> kapot tussen vijanden voor kettingreacties, en gebruik <strong className="text-rose-300">Spatie</strong> voor een Luchtaanval tijdens eindbazen.
             </p>
           </div>
         </aside>
