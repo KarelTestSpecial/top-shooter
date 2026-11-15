@@ -292,6 +292,7 @@ export interface FloatingText {
 
 export interface HudSnapshot {
   squadCount: number;
+  maxSquadReached: number;
   maxSquadLimit: number | null;
   weaponTier: WeaponTier;
   shieldCharges: number;

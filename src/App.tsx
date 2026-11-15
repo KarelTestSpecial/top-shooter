@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Crosshair, Home, Pause, Play, RotateCcw, SlidersHorizontal, Square, Volume2, VolumeX } from 'lucide-react';
+import { Bot, Crosshair, HelpCircle, Home, Pause, Play, RotateCcw, Shield, SlidersHorizontal, Square, Volume2, VolumeX, X } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { UpgradePanel } from './components/UpgradePanel';
 import { GameEngine, WEAPON_LABELS } from './game/engine';
@@ -254,6 +254,16 @@ export default function App() {
   const [selectedStage, setSelectedStage] = useState<number>(() => loadProgress().highestStage);
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(() => {
+    try {
+      return localStorage.getItem('poortrush_help_seen') !== '1';
+    } catch {
+      return true;
+    }
+  });
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const [showControlHint, setShowControlHint] = useState(false);
+  const [squadFlash, setSquadFlash] = useState<'up' | 'down' | null>(null);
   const [runSummary, setRunSummary] = useState<{
     stage: number;
     runGold: number;
@@ -265,6 +275,7 @@ export default function App() {
     const initial = loadProgress();
     return {
       squadCount: getStartSquadCount(initial.upgrades),
+      maxSquadReached: getStartSquadCount(initial.upgrades),
       maxSquadLimit: initial.settings.maxSquadCap,
       weaponTier: 'RIFLE',
     shieldCharges: 0,
@@ -297,6 +308,7 @@ export default function App() {
   const engineRef = useRef<GameEngine | null>(null);
   const isPointerDownRef = useRef(false);
   const keysPressedRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const prevSquadRef = useRef(hud.squadCount);
 
   useEffect(() => {
     sound.setMuted(progress.muted);
@@ -379,6 +391,79 @@ export default function App() {
     setGameState('TITLE_MENU');
   }, []);
 
+  const dismissHelp = useCallback(() => {
+    setShowHelp(false);
+    try {
+      localStorage.setItem('poortrush_help_seen', '1');
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  const bankRunAndExit = useCallback(() => {
+    if (gameState === 'PLAYING' || gameState === 'PAUSED') {
+      setProgress((prev) => ({
+        ...prev,
+        gold: prev.gold + hud.runGold,
+        bestSquad: Math.max(prev.bestSquad, hud.maxSquadReached),
+        totalKills: prev.totalKills + hud.kills,
+      }));
+    }
+    setShowStopConfirm(false);
+    engineRef.current?.stop();
+    setShowSettings(false);
+    setRunSummary(null);
+    setGameState('TITLE_MENU');
+  }, [gameState, hud.runGold, hud.kills, hud.maxSquadReached]);
+
+  const requestStop = useCallback(() => {
+    if (gameState !== 'PLAYING' && gameState !== 'PAUSED') {
+      goToTitleMenu();
+      return;
+    }
+    if (gameState === 'PLAYING') {
+      engineRef.current?.setPaused(true);
+    }
+    setShowStopConfirm(true);
+  }, [gameState, goToTitleMenu]);
+
+  const cancelStop = useCallback(() => {
+    setShowStopConfirm(false);
+    if (gameState === 'PLAYING') {
+      engineRef.current?.setPaused(false);
+    }
+  }, [gameState]);
+
+  useEffect(() => {
+    const prev = prevSquadRef.current;
+    if (hud.squadCount === prev) return;
+    prevSquadRef.current = hud.squadCount;
+    setSquadFlash(hud.squadCount > prev ? 'up' : 'down');
+    const timer = setTimeout(() => setSquadFlash(null), 400);
+    return () => clearTimeout(timer);
+  }, [hud.squadCount]);
+
+  useEffect(() => {
+    if (!showControlHint) return;
+    const timer = setTimeout(() => setShowControlHint(false), 9000);
+    return () => clearTimeout(timer);
+  }, [showControlHint]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (!document.hidden) return;
+      setGameState((curr) => {
+        if (curr === 'PLAYING') {
+          engineRef.current?.setPaused(true);
+          return 'PAUSED';
+        }
+        return curr;
+      });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   useEffect(() => {
     const updateDir = () => {
       const { left, right } = keysPressedRef.current;
@@ -387,6 +472,14 @@ export default function App() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (showHelp) {
+        if (e.key === 'Escape') dismissHelp();
+        return;
+      }
+      if (showStopConfirm) {
+        if (e.key === 'Escape') cancelStop();
+        return;
+      }
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         keysPressedRef.current.left = true;
         updateDir();
@@ -402,7 +495,7 @@ export default function App() {
       } else if (e.key === 'q' || e.key === 'Q' || e.key === 'Backspace') {
         if (!showSettings && (gameState === 'PLAYING' || gameState === 'PAUSED')) {
           e.preventDefault();
-          goToTitleMenu();
+          requestStop();
         }
       } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
         if (showSettings) {
@@ -439,14 +532,16 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gameState, showSettings, goToTitleMenu]);
+  }, [gameState, showSettings, showHelp, showStopConfirm, dismissHelp, cancelStop, requestStop]);
 
   const startStage = useCallback(
     (stageToPlay: number) => {
       sound.unlock();
       setShowSettings(false);
+      setShowStopConfirm(false);
       setSelectedStage(stageToPlay);
       setRunSummary(null);
+      setShowControlHint(true);
       setGameState('PLAYING');
       engineRef.current?.startStage(stageToPlay, progress.upgrades, progress.settings);
     },
@@ -515,7 +610,7 @@ export default function App() {
         <div className="flex items-center gap-6 min-w-0">
           <button
             type="button"
-            onClick={goToTitleMenu}
+            onClick={requestStop}
             className="font-display text-2xl font-extrabold tracking-tight text-white hover:text-sky-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             PoortRush
@@ -571,7 +666,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={goToTitleMenu}
+                onClick={requestStop}
                 title="Run stoppen (Q of Backspace)"
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-red-900/70 bg-red-950/60 px-3 text-xs font-semibold text-red-200 hover:bg-red-900/80 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               >
@@ -586,26 +681,50 @@ export default function App() {
       {/* Main Game Workspace */}
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col lg:flex-row gap-4 p-2 sm:p-4 min-h-0">
         {/* Mobile Slim HUD Strip */}
-        <div className="flex lg:hidden items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-slate-400 whitespace-nowrap">
-              Squad <strong className="font-mono-num text-sky-400 text-sm">{hud.squadCount}</strong>
-              <span className="font-mono-num text-slate-500">/{hud.maxSquadLimit ?? '∞'}</span>
-            </span>
-            <span aria-hidden="true" className="text-slate-600">·</span>
-            <span className="text-slate-200 font-medium truncate">{WEAPON_LABELS[hud.weaponTier]}</span>
-            {hud.comboCount >= 5 && (
-              <>
-                <span aria-hidden="true" className="text-slate-600">·</span>
-                <span className="text-yellow-300 font-mono-num font-bold whitespace-nowrap">{hud.comboCount}×</span>
-              </>
-            )}
+        <div className="flex lg:hidden flex-col gap-1.5 rounded-lg border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-slate-400 whitespace-nowrap">
+                Squad{' '}
+                <strong
+                  className={`font-mono-num text-sm transition-colors ${
+                    squadFlash === 'up'
+                      ? 'text-emerald-300'
+                      : squadFlash === 'down'
+                      ? 'text-red-400'
+                      : 'text-sky-400'
+                  }`}
+                >
+                  {hud.squadCount}
+                </strong>
+                <span className="font-mono-num text-slate-500">/{hud.maxSquadLimit ?? '∞'}</span>
+              </span>
+              <span aria-hidden="true" className="text-slate-600">·</span>
+              <span className="text-slate-200 font-medium truncate">{WEAPON_LABELS[hud.weaponTier]}</span>
+              {hud.comboCount >= 5 && (
+                <>
+                  <span aria-hidden="true" className="text-slate-600">·</span>
+                  <span className="text-yellow-300 font-mono-num font-bold whitespace-nowrap">{hud.comboCount}×</span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className={`font-mono-num font-semibold ${hud.hyperActive ? 'text-yellow-300' : 'text-amber-400'}`}>
+                {hud.hyperActive ? '2× HYPER' : `+${hud.runGold}`}
+              </span>
+              <span className="font-mono-num text-slate-400">
+                {hud.bossHp !== null ? 'EINDBAAS' : `${Math.round(hud.stageProgress * 100)}%`}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className={`font-mono-num font-semibold ${hud.hyperActive ? 'text-yellow-300' : 'text-amber-400'}`}>
-              {hud.hyperActive ? '2× HYPER' : `+${hud.runGold}`}
+          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1">
+              <Shield className="h-3 w-3 text-cyan-300" /> {hud.shieldCharges}
             </span>
-            <span className="font-mono-num text-slate-400">{Math.round(hud.stageProgress * 100)}%</span>
+            <span className="flex items-center gap-1">
+              <Bot className="h-3 w-3 text-emerald-300" /> {hud.droneCount}
+            </span>
+            <span className="ml-auto font-mono-num">Luchtaanval {hud.airstrikeCharge}%</span>
           </div>
         </div>
 
@@ -633,6 +752,27 @@ export default function App() {
           >
             <canvas ref={canvasRef} className="block h-full w-full" />
           </div>
+
+          {gameState === 'PLAYING' && showControlHint && (
+            <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-md border border-slate-700/70 bg-slate-950/80 px-2.5 py-1.5 text-[11px] text-slate-300 shadow-lg">
+              <span className="hidden sm:inline">
+                <span className="font-semibold text-slate-100">A/D</span> of muis ·{' '}
+                <span className="font-semibold text-slate-100">Spatie</span> = luchtaanval
+              </span>
+              <span className="sm:hidden">
+                Schuif met je vinger · tik op <span className="font-semibold text-slate-100">Luchtaanval</span>
+              </span>
+            </div>
+          )}
+
+          {gameState === 'PLAYING' &&
+            hud.squadCount > 0 &&
+            hud.squadCount <= Math.max(5, Math.round((hud.maxSquadLimit ?? 40) * 0.15)) && (
+              <div
+                className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl"
+                style={{ boxShadow: 'inset 0 0 70px rgba(239, 68, 68, 0.38)' }}
+              />
+            )}
 
           {/* Mobile Touch Airstrike Button */}
           {gameState === 'PLAYING' && (
@@ -693,6 +833,14 @@ export default function App() {
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                     Kies rekenpoortjes, blaas TNT-vaten op, pak wapenkisten en stel je eigen speelstijl in.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                    <span>Zo speel je</span>
+                  </button>
                 </div>
 
                 {/* Stage-lengte & Parameters Bar */}
@@ -795,7 +943,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={goToTitleMenu}
+                    onClick={requestStop}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
                   >
                     <Home className="h-4 w-4" />
@@ -930,6 +1078,117 @@ export default function App() {
             </div>
           )}
 
+          {/* HELP MODAL */}
+          {showHelp && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
+              <div className="w-full max-w-md max-h-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-sky-400">Snelstart</p>
+                    <h2 className="font-display text-2xl font-extrabold text-white leading-tight">
+                      Zo speel je PoortRush
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissHelp}
+                    aria-label="Uitleg sluiten"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-sm text-slate-300">
+                  <div className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-sky-500/15 font-mono-num text-xs font-bold text-sky-300">
+                      1
+                    </span>
+                    <p>
+                      <strong className="text-slate-100">Schuif</strong> met muis, touch of{' '}
+                      <strong className="text-slate-100">A/D</strong>. Je squad vuurt automatisch.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-sky-500/15 font-mono-num text-xs font-bold text-sky-300">
+                      2
+                    </span>
+                    <p>
+                      <strong className="text-slate-100">Poortjes</strong>: kies + of × voor je leger.
+                      Schiet rode negatieve poortjes kapot voor een boost.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-sky-500/15 font-mono-num text-xs font-bold text-sky-300">
+                      3
+                    </span>
+                    <p>
+                      <strong className="text-slate-100">Luchtaanval</strong> met{' '}
+                      <strong className="text-slate-100">Spatie</strong> of de tik-knop zodra de balk vol is.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-sky-500/15 font-mono-num text-xs font-bold text-sky-300">
+                      4
+                    </span>
+                    <p>
+                      <strong className="text-slate-100">Drones</strong> schieten mee, maar vijandelijk vuur
+                      kan ze raken en vernietigen.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={dismissHelp}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-sky-400 transition-colors cursor-pointer"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>Begrepen</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STOP CONFIRM MODAL */}
+          {showStopConfirm && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
+              <div className="w-full max-w-sm rounded-xl border border-red-900/60 bg-slate-900 p-6 shadow-2xl space-y-4">
+                <h2 className="font-display text-2xl font-extrabold text-white">Run stoppen?</h2>
+                <p className="text-sm text-slate-300">
+                  {hud.runGold > 0 ? (
+                    <>
+                      Je behoudt <strong className="text-amber-400">{hud.runGold} goud</strong> en gaat terug
+                      naar het startmenu. De huidige stage wordt niet afgerekend.
+                    </>
+                  ) : (
+                    <>Je gaat terug naar het startmenu. De huidige stage wordt niet afgerekend.</>
+                  )}
+                </p>
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={cancelStop}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-sky-400 transition-colors cursor-pointer"
+                  >
+                    <Play className="h-4 w-4 fill-current" />
+                    <span>Doorgaan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={bankRunAndExit}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-900/70 bg-red-950/60 px-4 py-2.5 text-sm font-semibold text-red-200 hover:bg-red-900/80 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Square className="h-3 w-3 fill-current" />
+                    <span>
+                      {hud.runGold > 0 ? `Stop & behoud ${hud.runGold} goud` : 'Stop & ga naar startmenu'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SETTINGS MODAL */}
           {showSettings && (
             <SettingsModal
@@ -950,7 +1209,9 @@ export default function App() {
               </div>
               <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="font-display text-3xl font-extrabold text-white">Stage {hud.stage}</span>
-                <span className="font-mono-num text-xs text-slate-400">{Math.round(hud.stageProgress * 100)}%</span>
+                <span className="font-mono-num text-xs text-slate-400">
+                  {hud.bossHp !== null ? 'EINDBAAS' : `${Math.round(hud.stageProgress * 100)}%`}
+                </span>
               </div>
               <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800">
                 <div
@@ -1000,8 +1261,12 @@ export default function App() {
                 <span className="text-sm text-slate-400">Soldaten</span>
                 <span className="font-mono-num text-right">
                   <strong
-                    className={`text-2xl font-bold ${
-                      hud.maxSquadLimit !== null && hud.squadCount >= hud.maxSquadLimit
+                    className={`text-2xl font-bold transition-colors ${
+                      squadFlash === 'up'
+                        ? 'text-emerald-300'
+                        : squadFlash === 'down'
+                        ? 'text-red-400'
+                        : hud.maxSquadLimit !== null && hud.squadCount >= hud.maxSquadLimit
                         ? 'text-amber-300'
                         : 'text-sky-400'
                     }`}

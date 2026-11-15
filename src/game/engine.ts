@@ -1852,6 +1852,7 @@ export class GameEngine {
 
     this.callbacks.onHudUpdate({
       squadCount: this.squadCount,
+      maxSquadReached: this.maxSquadReached,
       maxSquadLimit: this.currentMaxSquad,
       weaponTier: this.weaponTier,
       shieldCharges: this.shieldCharges,
@@ -1867,7 +1868,7 @@ export class GameEngine {
       comboCount: this.comboCount,
       biomeName: this.biome.name,
       stage: this.stage,
-      stageProgress: this.bossSpawned ? 1 : Math.min(1, this.distance / this.stageLengthUnits),
+      stageProgress: Math.min(1, this.distance / this.stageLengthUnits),
       runGold: this.runGold,
       kills: this.kills,
       dps,
