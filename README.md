@@ -1,11 +1,23 @@
-<div align="center">
+# PoortRush
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-  <h1>Built with AI Studio</h2>
+## Functies
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **Schuif & Auto-Vuur**: Bestuur je squad vloeiend met muis, touch of toetsenbord (`A`/`D` of pijltjestoetsen).
+- **Rekenpoortjes & Opschiet-poorten**: Kies tussen `+`, `×`, vuursnelheid- en schade-poortjes, of schiet negatieve rode poortjes omhoog zodat ze positief worden. Vanaf Stage 2 schuiven sommige poortjes over de brug.
+- **Tonnen & Kratten**:
+  - **Wapenkisten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun en Raketwerper.
+  - **Schild- & Dronekratten**: Voeg beschermende energieschilden en flankerende aanvalsdrones toe.
+- **Hypervuur**: Vul de Hypervuur-meter door vijanden en tonnen te breken voor 5,5 seconden extra vuursnelheid en `2×` goud.
+- **Eindbazen**: Versla unieke eindbazen (*Pantsertank*, *Storm-Gunship*, *IJzeren Kolos*) met getelegrafeerde aanvalsbanen.
+- **Directe Upgrades**: Besteed goud tussen rondes direct aan **Start-Squad**, **Vuurkracht**, **Vuursnelheid** en **Goudbonus**.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Lokaal draaien
 
-</div>
+```bash
+npm install
+npm run dev
+```
+
+Open daarna `http://localhost:3000`.
