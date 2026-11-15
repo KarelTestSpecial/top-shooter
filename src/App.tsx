@@ -5,13 +5,10 @@ import { UpgradePanel } from './components/UpgradePanel';
 import { GameEngine, WEAPON_LABELS } from './game/engine';
 import { sound } from './game/sound';
 import {
-  BOSS_STRENGTH_CONFIG,
+  ABSOLUTE_MAX_CAP,
   DEFAULT_GAMEPLAY_SETTINGS,
-  DENSITY_CONFIG,
-  DIFFICULTY_CONFIG,
-  MAX_SQUAD_CONFIG,
-  SPEED_CONFIG,
-  STAGE_LENGTH_CONFIG,
+  STAGE_LENGTH_PRESETS,
+  getStageLengthMetrics,
   getStartSquadCount,
   getUpgradeCost,
 } from './game/stages';
@@ -20,7 +17,6 @@ import {
   GameplaySettings,
   HudSnapshot,
   PersistentProgress,
-  StageLengthMode,
   UpgradeLevels,
 } from './game/types';
 
@@ -39,15 +35,140 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
+  settingsVersion: 4,
 };
+
+function clampNum(val: unknown, min: number, max: number, fallback: number): number {
+  if (typeof val !== 'number' || Number.isNaN(val)) return fallback;
+  return Math.max(min, Math.min(max, val));
+}
 
 function loadProgress(): PersistentProgress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PROGRESS;
-    const parsed = JSON.parse(raw) as Partial<PersistentProgress> & { stageLength?: StageLengthMode };
-    const savedSettings = parsed.settings;
-    const legacyLength = parsed.stageLength;
+    const parsed = JSON.parse(raw) as Partial<PersistentProgress> & {
+      stageLength?: string;
+      settings?: Partial<GameplaySettings> & Record<string, unknown>;
+    };
+    const saved = (parsed.settings ?? {}) as Partial<GameplaySettings> & Record<string, unknown>;
+    const legacyLenMap: Record<string, number> = { NORMAL: 1, LONG: 2, MARATHON: 3.5, ULTRA: 6 };
+    const legacySpeedMap: Record<string, number> = { SLOW: 0.78, NORMAL: 1, TURBO: 1.35 };
+    const legacyBossMap: Record<string, number> = { WEAK: 0.6, NORMAL: 1, STRONG: 1.75, TITAN: 2.8 };
+
+    let stageLengthFactor = DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor;
+    if (typeof saved.stageLengthFactor === 'number') {
+      stageLengthFactor = clampNum(saved.stageLengthFactor, 1, 6, 1);
+    } else if (typeof saved.stageLength === 'string' && saved.stageLength in legacyLenMap) {
+      stageLengthFactor = legacyLenMap[saved.stageLength];
+    } else if (typeof parsed.stageLength === 'string' && parsed.stageLength in legacyLenMap) {
+      stageLengthFactor = legacyLenMap[parsed.stageLength];
+    }
+
+    let gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+    if (typeof saved.gameSpeed === 'number') {
+      gameSpeed = clampNum(saved.gameSpeed, 0.6, 1.6, 1);
+    } else if (typeof saved.gameSpeed === 'string' && saved.gameSpeed in legacySpeedMap) {
+      gameSpeed = legacySpeedMap[saved.gameSpeed];
+    }
+
+    let enemyHpMult = DEFAULT_GAMEPLAY_SETTINGS.enemyHpMult;
+    let goldMult = DEFAULT_GAMEPLAY_SETTINGS.goldMult;
+    if (typeof saved.enemyHpMult === 'number') {
+      enemyHpMult = clampNum(saved.enemyHpMult, 0.5, 2.5, 1);
+    } else if (saved.difficulty === 'CHILL') {
+      enemyHpMult = 0.75;
+    } else if (saved.difficulty === 'CHAOS') {
+      enemyHpMult = 1.45;
+    }
+    if (typeof saved.goldMult === 'number') {
+      goldMult = clampNum(saved.goldMult, 0.5, 3.0, 1);
+    } else if (saved.difficulty === 'CHILL') {
+      goldMult = 0.85;
+    } else if (saved.difficulty === 'CHAOS') {
+      goldMult = 1.45;
+    }
+
+    let enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
+    if (typeof saved.enemyCountMult === 'number') {
+      enemyCountMult = clampNum(saved.enemyCountMult, 0.5, 2.5, 1);
+    } else if (saved.waveDensity === 'BUSY') {
+      enemyCountMult = 1.35;
+    } else if (saved.waveDensity === 'EXTREME') {
+      enemyCountMult = 1.75;
+    }
+
+    let maxSquadCap: number | null = DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap;
+    const rawCap: unknown = saved.maxSquadCap;
+    if (rawCap === null || rawCap === 'UNLIMITED') {
+      maxSquadCap = null;
+    } else if (typeof rawCap === 'number') {
+      maxSquadCap = clampNum(rawCap, 50, ABSOLUTE_MAX_CAP, 550);
+    } else if (typeof rawCap === 'string') {
+      const n = parseInt(rawCap, 10);
+      if (!Number.isNaN(n)) maxSquadCap = clampNum(n, 50, ABSOLUTE_MAX_CAP, 550);
+    }
+
+    let purpleGateFreq = DEFAULT_GAMEPLAY_SETTINGS.purpleGateFreq;
+    if (typeof saved.purpleGateFreq === 'number') {
+      purpleGateFreq = clampNum(saved.purpleGateFreq, 0, 100, DEFAULT_GAMEPLAY_SETTINGS.purpleGateFreq);
+    } else if (saved.dynamicSquadCap === false) {
+      purpleGateFreq = 0;
+    }
+    if ((parsed.settingsVersion ?? 1) < 3 && purpleGateFreq === 50) {
+      purpleGateFreq = DEFAULT_GAMEPLAY_SETTINGS.purpleGateFreq;
+    }
+
+    let purpleGateMin = clampNum(saved.purpleGateMin, 50, 1000, DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin);
+    let purpleGateMax = Math.max(
+      purpleGateMin,
+      clampNum(saved.purpleGateMax, 100, ABSOLUTE_MAX_CAP, DEFAULT_GAMEPLAY_SETTINGS.purpleGateMax),
+    );
+    if ((parsed.settingsVersion ?? 1) < 2 && purpleGateMin === 150 && purpleGateMax === 1000) {
+      purpleGateMin = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin;
+      purpleGateMax = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMax;
+    }
+
+    const enemyMaxGroupSizeRaw = clampNum(
+      saved.enemyMaxGroupSize,
+      15,
+      250,
+      DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize,
+    );
+
+    let miniBossMult =
+      typeof saved.miniBossMult === 'number'
+        ? clampNum(saved.miniBossMult, 0.4, 4.0, DEFAULT_GAMEPLAY_SETTINGS.miniBossMult)
+        : typeof saved.miniBossStrength === 'string' && saved.miniBossStrength in legacyBossMap
+          ? legacyBossMap[saved.miniBossStrength]
+          : DEFAULT_GAMEPLAY_SETTINGS.miniBossMult;
+
+    let bossMult =
+      typeof saved.bossMult === 'number'
+        ? clampNum(saved.bossMult, 0.4, 4.0, DEFAULT_GAMEPLAY_SETTINGS.bossMult)
+        : typeof saved.bossStrength === 'string' && saved.bossStrength in legacyBossMap
+          ? legacyBossMap[saved.bossStrength]
+          : DEFAULT_GAMEPLAY_SETTINGS.bossMult;
+
+    let enemyMaxGroupSize = enemyMaxGroupSizeRaw;
+    if (
+      (parsed.settingsVersion ?? 1) < 4 &&
+      gameSpeed === 1 &&
+      enemyHpMult === 1 &&
+      enemyCountMult === 1 &&
+      goldMult === 1 &&
+      miniBossMult === 1 &&
+      bossMult === 1
+    ) {
+      gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+      enemyHpMult = DEFAULT_GAMEPLAY_SETTINGS.enemyHpMult;
+      enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
+      enemyMaxGroupSize = DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize;
+      goldMult = DEFAULT_GAMEPLAY_SETTINGS.goldMult;
+      miniBossMult = DEFAULT_GAMEPLAY_SETTINGS.miniBossMult;
+      bossMult = DEFAULT_GAMEPLAY_SETTINGS.bossMult;
+    }
+
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -61,31 +182,25 @@ function loadProgress(): PersistentProgress {
       },
       muted: Boolean(parsed.muted),
       settings: {
-        stageLength: savedSettings?.stageLength ?? legacyLength ?? DEFAULT_GAMEPLAY_SETTINGS.stageLength,
-        difficulty: savedSettings?.difficulty ?? DEFAULT_GAMEPLAY_SETTINGS.difficulty,
-        gameSpeed: savedSettings?.gameSpeed ?? DEFAULT_GAMEPLAY_SETTINGS.gameSpeed,
-        waveDensity: savedSettings?.waveDensity ?? DEFAULT_GAMEPLAY_SETTINGS.waveDensity,
-        startWeapon: savedSettings?.startWeapon ?? DEFAULT_GAMEPLAY_SETTINGS.startWeapon,
-        startShield: typeof savedSettings?.startShield === 'number' ? savedSettings.startShield : DEFAULT_GAMEPLAY_SETTINGS.startShield,
-        startDrones: typeof savedSettings?.startDrones === 'number' ? savedSettings.startDrones : DEFAULT_GAMEPLAY_SETTINGS.startDrones,
-        biomeChoice: savedSettings?.biomeChoice ?? DEFAULT_GAMEPLAY_SETTINGS.biomeChoice,
-        maxSquadCap:
-          savedSettings?.maxSquadCap && savedSettings.maxSquadCap in MAX_SQUAD_CONFIG
-            ? savedSettings.maxSquadCap
-            : DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap,
-        dynamicSquadCap:
-          typeof savedSettings?.dynamicSquadCap === 'boolean'
-            ? savedSettings.dynamicSquadCap
-            : DEFAULT_GAMEPLAY_SETTINGS.dynamicSquadCap,
-        miniBossStrength:
-          savedSettings?.miniBossStrength && savedSettings.miniBossStrength in BOSS_STRENGTH_CONFIG
-            ? savedSettings.miniBossStrength
-            : DEFAULT_GAMEPLAY_SETTINGS.miniBossStrength,
-        bossStrength:
-          savedSettings?.bossStrength && savedSettings.bossStrength in BOSS_STRENGTH_CONFIG
-            ? savedSettings.bossStrength
-            : DEFAULT_GAMEPLAY_SETTINGS.bossStrength,
+        stageLengthFactor,
+        gameSpeed,
+        enemyHpMult,
+        enemyCountMult,
+        enemyMaxGroupSize,
+        goldMult,
+        startWeapon: saved.startWeapon ?? DEFAULT_GAMEPLAY_SETTINGS.startWeapon,
+        startShield: clampNum(saved.startShield, 0, 5, DEFAULT_GAMEPLAY_SETTINGS.startShield),
+        startDrones: clampNum(saved.startDrones, 0, 6, DEFAULT_GAMEPLAY_SETTINGS.startDrones),
+        biomeChoice: saved.biomeChoice ?? DEFAULT_GAMEPLAY_SETTINGS.biomeChoice,
+        maxSquadCap,
+        purpleGateFreq,
+        purpleDoubleChance: clampNum(saved.purpleDoubleChance, 0, 100, DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance),
+        purpleGateMin,
+        purpleGateMax,
+        miniBossMult,
+        bossMult,
       },
+      settingsVersion: 4,
     };
   } catch {
     return DEFAULT_PROGRESS;
@@ -108,7 +223,7 @@ export default function App() {
     const initial = loadProgress();
     return {
       squadCount: getStartSquadCount(initial.upgrades),
-      maxSquadLimit: MAX_SQUAD_CONFIG[initial.settings.maxSquadCap].cap,
+      maxSquadLimit: initial.settings.maxSquadCap,
       weaponTier: 'RIFLE',
     shieldCharges: 0,
     droneCount: 0,
@@ -295,10 +410,10 @@ export default function App() {
     setProgress((prev) => ({ ...prev, settings: nextSettings }));
   }, []);
 
-  const setStageLength = useCallback((mode: StageLengthMode) => {
+  const setStageLengthFactor = useCallback((factor: number) => {
     setProgress((prev) => ({
       ...prev,
-      settings: { ...prev.settings, stageLength: mode },
+      settings: { ...prev.settings, stageLengthFactor: factor },
     }));
   }, []);
 
@@ -341,7 +456,10 @@ export default function App() {
 
   const airstrikeReady = hud.airstrikeCharge >= 100;
   const s = progress.settings;
-  const settingsSummary = `${DIFFICULTY_CONFIG[s.difficulty].label} · ${SPEED_CONFIG[s.gameSpeed].label} · ${MAX_SQUAD_CONFIG[s.maxSquadCap].shortLabel} · ${WEAPON_LABELS[s.startWeapon].split(' ')[0]}`;
+  const stageLenMetrics = getStageLengthMetrics(s.stageLengthFactor);
+  const stageLenLabel = `${stageLenMetrics.factor.toFixed(1).replace('.', ',')}×`;
+  const maxSquadLabel = s.maxSquadCap === null ? '∞' : `Max ${s.maxSquadCap}`;
+  const settingsSummary = `${Math.round(s.gameSpeed * 100)}% tempo · ${maxSquadLabel} · MAX-poort ${s.purpleGateFreq}% · ${WEAPON_LABELS[s.startWeapon].split(' ')[0]}`;
 
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#090D16] text-slate-100 select-none">
@@ -533,21 +651,20 @@ export default function App() {
                 {/* Stage-lengte & Parameters Bar */}
                 <div className="space-y-2 border-t border-b border-slate-800 py-3">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
-                    {(['NORMAL', 'LONG', 'MARATHON', 'ULTRA'] as StageLengthMode[]).map((mode) => {
-                      const cfg = STAGE_LENGTH_CONFIG[mode];
-                      const active = s.stageLength === mode;
+                    {STAGE_LENGTH_PRESETS.map((preset) => {
+                      const active = Math.abs(s.stageLengthFactor - preset.factor) < 0.05;
                       return (
                         <button
-                          key={mode}
+                          key={preset.label}
                           type="button"
-                          onClick={() => setStageLength(mode)}
+                          onClick={() => setStageLengthFactor(preset.factor)}
                           className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                             active
                               ? 'bg-sky-500 text-slate-950'
                               : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                           }`}
                         >
-                          {cfg.label} ({cfg.factorLabel})
+                          {preset.label} ({preset.shortLabel})
                         </button>
                       );
                     })}
@@ -676,7 +793,7 @@ export default function App() {
                     <span>Spelparameters</span>
                   </span>
                   <span className="text-slate-400 truncate">
-                    {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel}) · {settingsSummary}
+                    Lengte {stageLenLabel} · {settingsSummary}
                   </span>
                 </button>
 
@@ -738,7 +855,7 @@ export default function App() {
                     <span>Spelparameters</span>
                   </span>
                   <span className="text-slate-400 truncate">
-                    {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel}) · {settingsSummary}
+                    Lengte {stageLenLabel} · {settingsSummary}
                   </span>
                 </button>
 
@@ -768,7 +885,12 @@ export default function App() {
 
           {/* SETTINGS MODAL */}
           {showSettings && (
-            <SettingsModal settings={s} onChange={updateSettings} onClose={() => setShowSettings(false)} />
+            <SettingsModal
+              settings={s}
+              currentStage={gameState === 'PLAYING' || gameState === 'PAUSED' ? hud.stage : selectedStage}
+              onChange={updateSettings}
+              onClose={() => setShowSettings(false)}
+            />
           )}
         </div>
 
@@ -777,7 +899,7 @@ export default function App() {
           <div className="space-y-4">
             <div>
               <div className="text-xs font-medium text-slate-400">
-                {hud.biomeName} · {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel})
+                {hud.biomeName} · Lengte {stageLenLabel}
               </div>
               <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="font-display text-3xl font-extrabold text-white">Stage {hud.stage}</span>
@@ -872,12 +994,12 @@ export default function App() {
           <div className="space-y-2 border-t border-slate-800 pt-3.5 text-xs text-slate-400">
             <div className="flex items-center justify-between">
               <span className="font-medium text-slate-300">Actieve Instellingen</span>
-              <span className="text-slate-500">{DIFFICULTY_CONFIG[s.difficulty].label}</span>
+              <span className="font-mono-num text-slate-500">HP {Math.round(s.enemyHpMult * 100)}%</span>
             </div>
             <p className="leading-relaxed">
-              {SPEED_CONFIG[s.gameSpeed].label} tempo · {DENSITY_CONFIG[s.waveDensity].label} hordes ·{' '}
-              {MAX_SQUAD_CONFIG[s.maxSquadCap].shortLabel} · {s.dynamicSquadCap ? 'MAX-poorten aan' : 'MAX-poorten uit'} ·{' '}
-              Mini {BOSS_STRENGTH_CONFIG[s.miniBossStrength].factorLabel} · Baas {BOSS_STRENGTH_CONFIG[s.bossStrength].factorLabel} ·{' '}
+              {Math.round(s.gameSpeed * 100)}% tempo · {Math.round(s.enemyCountMult * 100)}% hordes (max {s.enemyMaxGroupSize}) ·{' '}
+              {maxSquadLabel} · MAX-poorten {s.purpleGateFreq}% ({s.purpleDoubleChance}% dubbel) ·{' '}
+              Mini {s.miniBossMult.toFixed(1).replace('.', ',')}× · Baas {s.bossMult.toFixed(1).replace('.', ',')}× ·{' '}
               {WEAPON_LABELS[s.startWeapon]}
             </p>
           </div>

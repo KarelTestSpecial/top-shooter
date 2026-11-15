@@ -1,17 +1,14 @@
 import {
-  BOSS_STRENGTH_CONFIG,
+  ABSOLUTE_MAX_CAP,
   BarrelSpec,
   BarrierSpec,
-  DIFFICULTY_CONFIG,
   EnemySpec,
   GateSpec,
-  MAX_SQUAD_CONFIG,
-  SPEED_CONFIG,
-  STAGE_LENGTH_CONFIG,
   generateStageEvents,
   getFireRateMultiplier,
   getFirepowerMultiplier,
   getGoldMultiplier,
+  getStageLengthMetrics,
   getStartSquadCount,
 } from './stages';
 import { sound } from './sound';
@@ -174,6 +171,8 @@ export class GameEngine {
   private fireCooldown = 0;
   private roadScroll = 0;
   private shakeIntensity = 0;
+  private damageCooldown = 0;
+  private damageFlashTimer = 0;
   private hudSyncTimer = 0;
   private muzzleFlash = 0;
   private nextEntityId = 1;
@@ -218,19 +217,19 @@ export class GameEngine {
 
   startStage(stage: number, upgrades: UpgradeLevels, settings: GameplaySettings) {
     this.stage = stage;
-    this.stageLengthUnits = STAGE_LENGTH_CONFIG[settings.stageLength].units;
-    this.speedMult = SPEED_CONFIG[settings.gameSpeed].mult;
-    this.difficultyGoldMult = DIFFICULTY_CONFIG[settings.difficulty].goldMult;
-    this.difficultyDmgMult = DIFFICULTY_CONFIG[settings.difficulty].dmgMult;
-    this.miniBossDmgMult = BOSS_STRENGTH_CONFIG[settings.miniBossStrength].dmgMult;
-    this.bossDmgMult = BOSS_STRENGTH_CONFIG[settings.bossStrength].dmgMult;
+    this.stageLengthUnits = getStageLengthMetrics(settings.stageLengthFactor).units;
+    this.speedMult = settings.gameSpeed;
+    this.difficultyGoldMult = settings.goldMult;
+    this.difficultyDmgMult = Math.sqrt(settings.enemyHpMult);
+    this.miniBossDmgMult = Math.sqrt(settings.miniBossMult);
+    this.bossDmgMult = Math.sqrt(settings.bossMult);
 
     if (settings.biomeChoice === 'COAST') this.biome = BIOMES[0];
     else if (settings.biomeChoice === 'DESERT') this.biome = BIOMES[1];
     else if (settings.biomeChoice === 'REACTOR') this.biome = BIOMES[2];
     else this.biome = BIOMES[(stage - 1) % BIOMES.length];
 
-    this.currentMaxSquad = MAX_SQUAD_CONFIG[settings.maxSquadCap].cap;
+    this.currentMaxSquad = settings.maxSquadCap === null ? null : Math.min(ABSOLUTE_MAX_CAP, settings.maxSquadCap);
     this.upgrades = { ...upgrades };
     this.playerX = 0;
     this.targetX = 0;
@@ -273,6 +272,8 @@ export class GameEngine {
     this.elapsedTime = 0;
     this.fireCooldown = 0;
     this.shakeIntensity = 0;
+    this.damageCooldown = 0;
+    this.damageFlashTimer = 0;
     this.paused = false;
     this.running = true;
 
@@ -420,6 +421,12 @@ export class GameEngine {
     if (this.shakeIntensity > 0) {
       this.shakeIntensity = Math.max(0, this.shakeIntensity - dt * 28);
     }
+    if (this.damageCooldown > 0) {
+      this.damageCooldown = Math.max(0, this.damageCooldown - dt);
+    }
+    if (this.damageFlashTimer > 0) {
+      this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
+    }
     if (this.muzzleFlash > 0) {
       this.muzzleFlash = Math.max(0, this.muzzleFlash - dt * 12);
     }
@@ -511,7 +518,10 @@ export class GameEngine {
   }
 
   private spawnEvent(ev: StageWaveEvent) {
-    if (ev.type === 'GATE_PAIR') {
+    if (ev.type === 'GATE_SINGLE') {
+      const payload = ev.payload as { x: number; width: number; gate: GateSpec };
+      this.gates.push(this.createGate('center', payload.x, payload.width, payload.gate, 0));
+    } else if (ev.type === 'GATE_PAIR') {
       const payload = ev.payload as { left: GateSpec; right: GateSpec };
       this.gates.push(this.createGate('left', -0.49, 0.86, payload.left, 0));
       this.gates.push(this.createGate('right', 0.49, 0.86, payload.right, Math.PI));
@@ -548,7 +558,7 @@ export class GameEngine {
             : b.kind === 'DRONE_CRATE'
             ? { type: 'DRONE' as const, count: 1 }
             : b.kind === 'TNT_BARREL'
-            ? { type: 'TNT' as const, radius: 0.55, damage: Math.round(90 * Math.pow(1.36, this.stage - 1)) }
+            ? { type: 'TNT' as const, radius: 0.58, damage: Math.round(95 * Math.pow(1.36, this.stage - 1) * this.difficultyDmgMult) }
             : { type: 'GOLD' as const, amount: b.goldAmount ?? 12 };
 
         this.barrels.push({
@@ -567,13 +577,14 @@ export class GameEngine {
     } else if (ev.type === 'ENEMIES') {
       const specs = ev.payload as EnemySpec[];
       for (const e of specs) {
-        const units = Array.from({ length: Math.min(24, e.count) }, (_, i) => {
-          const cols = Math.min(5, Math.ceil(Math.sqrt(e.count)));
+        const spriteCap = Math.min(36, e.count);
+        const cols = Math.min(6, Math.ceil(Math.sqrt(spriteCap)));
+        const units = Array.from({ length: spriteCap }, (_, i) => {
           const row = Math.floor(i / cols);
           const col = i % cols;
           return {
-            offsetX: (col - (cols - 1) / 2) * 0.075 + (Math.random() - 0.5) * 0.015,
-            offsetZ: -row * 0.026,
+            offsetX: (col - (cols - 1) / 2) * 0.072 + (Math.random() - 0.5) * 0.015,
+            offsetZ: -row * 0.024,
             alive: true,
           };
         });
@@ -587,7 +598,7 @@ export class GameEngine {
           hpPerUnit: e.hpPerUnit,
           currentFrontHp: e.hpPerUnit,
           kind: e.kind,
-          fireTimer: e.kind === 'TURRET' ? 1.15 : 0,
+          fireTimer: e.kind === 'TURRET' ? 0.95 : e.kind === 'RAIDER' ? 1.15 + Math.random() * 0.85 : 0,
           flashTimer: 0,
           units,
         });
@@ -604,15 +615,16 @@ export class GameEngine {
         x: 0,
         z: 0.02,
         targetZ: isMini ? 0.36 : 0.34,
-        vx: isMini ? 0.22 : 0.28,
+        vx: payload.kind === 'HELI' ? (isMini ? 0.28 : 0.36) : isMini ? 0.22 : 0.28,
         hp: payload.hp,
         maxHp: payload.hp,
         flashTimer: 0,
         goldReward: payload.goldReward,
-        attackTimer: isMini ? 2.1 : 1.6,
+        attackTimer: isMini ? 1.55 : 1.25,
         rotorAngle: 0,
         telegraphLanes: [],
         telegraphTimer: 0,
+        summonedReinforcements: false,
       };
       this.spawnFloatingText(
         this.width * 0.5,
@@ -635,7 +647,8 @@ export class GameEngine {
     this.fireCooldown = interval;
 
     const activeShooters = Math.min(7, Math.max(1, Math.ceil(this.squadCount / 4)));
-    const dmgScale = (this.squadCount / activeShooters) * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus;
+    const effectiveSquadPower = Math.pow(this.squadCount, 0.86);
+    const dmgScale = (effectiveSquadPower / activeShooters) * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus;
     const critChance = Math.min(0.4, this.comboCount * 0.012);
     const isCrit = Math.random() < critChance;
     const bulletDamage = spec.damage * dmgScale * 0.45 * (this.hyperTimer > 0 ? 1.2 : 1) * (isCrit ? 1.75 : 1);
@@ -914,10 +927,10 @@ export class GameEngine {
         this.upgradeWeapon(barrel.reward.tier);
         this.spawnFloatingText(proj.x, proj.y - 20, `WAPEN: ${WEAPON_LABELS[barrel.reward.tier].toUpperCase()}`, '#FDE047', 1.25);
       } else if (barrel.reward.type === 'SHIELD') {
-        this.shieldCharges = Math.min(3, this.shieldCharges + barrel.reward.charges);
+        this.shieldCharges = Math.min(5, this.shieldCharges + barrel.reward.charges);
         this.spawnFloatingText(proj.x, proj.y - 20, 'ENERGIESCHILD ACTIEF!', '#22D3EE', 1.2);
       } else if (barrel.reward.type === 'DRONE') {
-        this.droneCount = Math.min(4, this.droneCount + barrel.reward.count);
+        this.droneCount = Math.min(6, this.droneCount + barrel.reward.count);
         this.spawnFloatingText(proj.x, proj.y - 20, '+1 AANVALSDRONE!', '#34D399', 1.2);
       } else if (barrel.reward.type === 'TNT') {
         this.spawnFloatingText(proj.x, proj.y - 24, 'TNT BOEM!', '#EF4444', 1.35);
@@ -952,14 +965,35 @@ export class GameEngine {
         this.awardGold(group.kind === 'BRUTE' || group.kind === 'TURRET' ? 5 : 2, proj.x, proj.y);
         this.addHyperCharge(group.kind === 'BRUTE' || group.kind === 'TURRET' ? 6 : 2.5);
         group.currentFrontHp = group.hpPerUnit;
-        const aliveUnit = group.units.find((u) => u.alive);
-        if (aliveUnit) aliveUnit.alive = false;
         if (Math.random() < 0.65) {
           this.spawnParticles(proj.x, proj.y, '#EF4444', 3);
         }
       } else {
         group.currentFrontHp -= remaining;
         remaining = 0;
+      }
+    }
+    this.syncEnemyUnits(group);
+    if (group.kind === 'BOMBER' && group.count <= 0 && group.z < 0.88) {
+      this.spawnFloatingText(proj.x, proj.y - 20, 'BOMBER BOEM!', '#FB923C', 1.15);
+      const bomberBlast = Math.round(58 * Math.pow(1.36, this.stage - 1) * this.difficultyDmgMult);
+      this.triggerAoeBlast(group.x, group.z, bomberBlast, 0.38, '#FB923C');
+    }
+  }
+
+  private syncEnemyUnits(group: EnemyGroup) {
+    if (group.units.length === 0) return;
+    const targetAlive =
+      group.count <= 0
+        ? 0
+        : Math.min(group.units.length, Math.max(1, Math.ceil((group.count / Math.max(1, group.maxCount)) * group.units.length)));
+    let aliveCount = 0;
+    for (let idx = group.units.length - 1; idx >= 0; idx--) {
+      if (aliveCount < targetAlive) {
+        group.units[idx].alive = true;
+        aliveCount++;
+      } else {
+        group.units[idx].alive = false;
       }
     }
   }
@@ -1009,9 +1043,14 @@ export class GameEngine {
     }
   }
 
-  private absorbOrDamageSquad(loss: number, label = '') {
+  private absorbOrDamageSquad(loss: number, label = '', respectIFrames = false) {
+    if (respectIFrames && this.damageCooldown > 0) {
+      return;
+    }
+
     if (this.shieldCharges > 0) {
       this.shieldCharges -= 1;
+      if (respectIFrames) this.damageCooldown = 0.25;
       sound.playShieldBlock();
       const proj = this.project(this.playerX, 0.92);
       this.spawnShockwave(proj.x, proj.y, '#22D3EE', 78);
@@ -1019,12 +1058,20 @@ export class GameEngine {
       return;
     }
 
+    const before = this.squadCount;
     this.comboCount = 0;
     this.squadCount = Math.max(0, this.squadCount - loss);
+    const actualLoss = before - this.squadCount;
+    if (respectIFrames) {
+      this.damageCooldown = 0.36;
+    }
+    this.damageFlashTimer = 0.36;
+
     sound.playNegativeGate();
     const proj = this.project(this.playerX, 0.94);
-    this.spawnParticles(proj.x, proj.y, '#EF4444', 12);
-    this.spawnFloatingText(proj.x, proj.y - 28, label || `-${loss}`, '#F87171', 1.18);
+    this.spawnParticles(proj.x, proj.y, '#EF4444', 14);
+    this.spawnShockwave(proj.x, proj.y, '#EF4444', 64);
+    this.spawnFloatingText(proj.x, proj.y - 30, label || `-${actualLoss} Soldaten`, '#FCA5A5', 1.25);
     if (!this.reducedMotion) this.shakeIntensity = 6;
   }
 
@@ -1088,32 +1135,33 @@ export class GameEngine {
       this.tempDamageBonus = Math.min(2.8, this.tempDamageBonus + g.value / 100);
       label = `+${g.value}% Vuurkracht`;
     } else if (g.op === 'CAP_SET') {
+      const targetCap = Math.min(ABSOLUTE_MAX_CAP, g.value);
       const prevCap = this.currentMaxSquad;
       const prevSquad = this.squadCount;
-      this.currentMaxSquad = g.value;
-      if (this.squadCount > g.value) {
-        this.squadCount = g.value;
+      this.currentMaxSquad = targetCap;
+      if (this.squadCount > targetCap) {
+        this.squadCount = targetCap;
       }
       const lost = prevSquad - this.squadCount;
-      const lowered = prevCap === null || g.value < prevCap;
+      const lowered = prevCap === null || targetCap < prevCap;
 
       if (lowered) {
         sound.playNegativeGate();
         if (lost > 0) {
           this.comboCount = 0;
           this.spawnParticles(proj.x, proj.y, '#EF4444', 14);
-          this.spawnFloatingText(proj.x, proj.y - 30, `MAX ${g.value} (-${lost} Soldaten!)`, '#FB923C', 1.25);
+          this.spawnFloatingText(proj.x, proj.y - 30, `MAX ${targetCap} (-${lost} Soldaten!)`, '#FB923C', 1.25);
           if (!this.reducedMotion) this.shakeIntensity = 6;
         } else {
           this.spawnParticles(proj.x, proj.y, '#C084FC', 10);
-          this.spawnFloatingText(proj.x, proj.y - 30, `MAX LIMIET -> ${g.value}`, '#E9D5FF', 1.2);
+          this.spawnFloatingText(proj.x, proj.y - 30, `MAX LIMIET -> ${targetCap}`, '#E9D5FF', 1.2);
         }
         return;
       }
 
-      if (prevCap === g.value) {
+      if (prevCap === targetCap) {
         sound.playPositiveGate();
-        this.spawnFloatingText(proj.x, proj.y - 30, `MAX BLIJFT ${g.value}`, '#E9D5FF', 1.15);
+        this.spawnFloatingText(proj.x, proj.y - 30, `MAX BLIJFT ${targetCap}`, '#E9D5FF', 1.15);
         return;
       }
 
@@ -1121,7 +1169,7 @@ export class GameEngine {
       this.addHyperCharge(10);
       this.spawnParticles(proj.x, proj.y, '#C084FC', 14);
       this.spawnShockwave(proj.x, proj.y, '#A855F7', 68);
-      this.spawnFloatingText(proj.x, proj.y - 34, `MAX LIMIET -> ${g.value}!`, '#E9D5FF', 1.25);
+      this.spawnFloatingText(proj.x, proj.y - 34, `MAX LIMIET -> ${targetCap}!`, '#E9D5FF', 1.25);
       return;
     }
 
@@ -1154,7 +1202,7 @@ export class GameEngine {
 
       if (br.z >= 0.91 && br.z <= 0.99 && Math.abs(this.playerX - br.x) < br.width * 0.5 + 0.05) {
         br.destroyed = true;
-        this.absorbOrDamageSquad(br.damage, `-${br.damage} Barrière`);
+        this.absorbOrDamageSquad(br.damage, `-${br.damage} Barrière`, true);
       }
 
       if (br.z > 1.1) {
@@ -1177,12 +1225,12 @@ export class GameEngine {
       if (b.z >= 0.9 && b.z <= 0.99 && Math.abs(this.playerX - b.x) < b.radius + 0.08) {
         if (b.kind === 'TNT_BARREL') {
           b.destroyed = true;
-          this.absorbOrDamageSquad(5, 'TNT BOEM!');
+          this.absorbOrDamageSquad(5, 'TNT BOEM!', true);
           this.triggerAoeBlast(b.x, b.z, 70, 0.45, '#EF4444');
         } else {
-          const loss = Math.max(2, Math.ceil(b.hp / 16));
+          const loss = Math.max(2, Math.min(8, Math.ceil(b.hp / 22)));
           b.destroyed = true;
-          this.absorbOrDamageSquad(loss);
+          this.absorbOrDamageSquad(loss, `-${loss} Botsing`, true);
         }
       }
 
@@ -1203,27 +1251,89 @@ export class GameEngine {
       g.z += g.speed * this.speedMult * dt;
       if (g.kind === 'TURRET') {
         g.fireTimer -= dt * this.speedMult;
-        if (g.fireTimer <= 0 && g.z < 0.8) {
-          g.fireTimer = Math.max(1.25, 1.85 - this.stage * 0.08);
-          this.hazards.push({
-            id: this.nextEntityId++,
-            x: g.x,
-            z: g.z + 0.03,
-            speed: 0.46,
-            damage: Math.max(1, Math.round((2 + Math.floor(this.stage * 0.5)) * this.difficultyDmgMult)),
-            radius: 0.1,
-          });
+        if (g.fireTimer <= 0 && g.z < 0.78) {
+          g.fireTimer = Math.max(0.95, 1.45 - this.stage * 0.07);
+          const dmg = Math.max(1, Math.round((2 + Math.floor(this.stage * 0.5)) * this.difficultyDmgMult));
+          if (this.stage >= 3) {
+            for (const dx of [-0.09, 0.09]) {
+              this.hazards.push({
+                id: this.nextEntityId++,
+                x: Math.max(-0.78, Math.min(0.78, g.x + dx)),
+                z: g.z + 0.03,
+                speed: 0.48,
+                damage: dmg,
+                radius: 0.09,
+              });
+            }
+          } else {
+            this.hazards.push({
+              id: this.nextEntityId++,
+              x: g.x,
+              z: g.z + 0.03,
+              speed: 0.48,
+              damage: dmg,
+              radius: 0.1,
+            });
+          }
         }
+      } else if (g.kind === 'RAIDER') {
+        if (g.count >= 4 && g.z > 0.24 && g.z < 0.68) {
+          g.fireTimer -= dt * this.speedMult;
+          if (g.fireTimer <= 0) {
+            g.fireTimer = Math.max(1.45, 2.25 - this.stage * 0.06);
+            this.hazards.push({
+              id: this.nextEntityId++,
+              x: g.x,
+              z: g.z + 0.03,
+              speed: 0.45,
+              damage: Math.max(1, Math.round((1 + Math.floor(this.stage * 0.4)) * this.difficultyDmgMult)),
+              radius: 0.08,
+            });
+          }
+        }
+        if (g.z > 0.52) {
+          g.x += (this.playerX - g.x) * Math.min(1, dt * 1.0);
+        }
+      } else if (g.kind === 'RUSHER') {
+        g.x += Math.sin(this.elapsedTime * 5.2 + g.id) * 0.34 * dt;
+        if (g.z > 0.46) {
+          g.x += (this.playerX - g.x) * Math.min(1, dt * 1.45);
+        }
+        g.x = Math.max(-0.76, Math.min(0.76, g.x));
+      } else if (g.kind === 'BOMBER') {
+        g.x += Math.sin(this.elapsedTime * 4.0 + g.id) * 0.22 * dt;
+        if (g.z > 0.44) {
+          g.x += (this.playerX - g.x) * Math.min(1, dt * 1.25);
+        }
+        g.x = Math.max(-0.76, Math.min(0.76, g.x));
       } else if (g.z > 0.55) {
-        g.x += (this.playerX - g.x) * Math.min(1, dt * (g.kind === 'RUSHER' ? 1.3 : 0.9));
+        g.x += (this.playerX - g.x) * Math.min(1, dt * 0.85);
       }
+
       if (g.flashTimer > 0) g.flashTimer = Math.max(0, g.flashTimer - dt);
 
       if (g.z >= 0.91 && g.z <= 1.02 && Math.abs(this.playerX - g.x) < 0.28) {
-        const loss = g.count;
-        g.count = 0;
-        this.enemies.splice(i, 1);
-        this.absorbOrDamageSquad(loss, `-${loss} Botsing`);
+        if (this.damageCooldown > 0) continue;
+        const maxSingleHit = this.squadCount > 5 ? Math.max(3, Math.ceil(this.squadCount * 0.36)) : g.count;
+        const baseLoss = g.kind === 'BOMBER' ? Math.max(3, g.count * 2) : g.count;
+        const loss = Math.min(maxSingleHit, baseLoss);
+        if (g.kind === 'BOMBER') {
+          g.count = 0;
+          const proj = this.project(g.x, g.z);
+          this.spawnParticles(proj.x, proj.y, '#FB923C', 16);
+          this.spawnShockwave(proj.x, proj.y, '#EF4444', 82);
+          sound.playExplosion();
+        } else {
+          g.count -= Math.min(g.count, loss);
+        }
+        this.syncEnemyUnits(g);
+        if (g.count <= 0) {
+          this.enemies.splice(i, 1);
+        } else {
+          g.z -= g.kind === 'BRUTE' ? 0.1 : 0.16;
+          g.flashTimer = 0.12;
+        }
+        this.absorbOrDamageSquad(loss, g.kind === 'BOMBER' ? `-${loss} Bomber-Knall!` : `-${loss} Tegenaanval`, true);
         continue;
       }
 
@@ -1233,16 +1343,54 @@ export class GameEngine {
     }
   }
 
+  private spawnBossReinforcements(boss: BossEntity) {
+    const escortCount = Math.max(6, Math.min(28, 6 + this.stage * 2));
+    const unitHp = Math.round(5.5 * Math.pow(1.32, this.stage - 1) * this.difficultyDmgMult);
+    for (const sideX of [-0.52, 0.52]) {
+      const spriteCap = Math.min(24, escortCount);
+      const cols = Math.min(5, Math.ceil(Math.sqrt(spriteCap)));
+      const units = Array.from({ length: spriteCap }, (_, idx) => {
+        const row = Math.floor(idx / cols);
+        const col = idx % cols;
+        return {
+          offsetX: (col - (cols - 1) / 2) * 0.07 + (Math.random() - 0.5) * 0.015,
+          offsetZ: -row * 0.024,
+          alive: true,
+        };
+      });
+      this.enemies.push({
+        id: this.nextEntityId++,
+        x: sideX,
+        z: boss.z + 0.06,
+        speed: 0.34,
+        count: escortCount,
+        maxCount: escortCount,
+        hpPerUnit: unitHp,
+        currentFrontHp: unitHp,
+        kind: sideX < 0 ? 'RUSHER' : 'RAIDER',
+        fireTimer: 1.2,
+        flashTimer: 0,
+        units,
+      });
+    }
+    this.spawnFloatingText(this.width * 0.5, this.height * 0.24, 'VERSTERKINGEN INGESCHAKELD!', '#FBBF24', 1.25);
+  }
+
   private updateBoss(dt: number) {
     if (!this.boss) return;
     const boss = this.boss;
-    const enraged = !boss.isMiniBoss && boss.hp < boss.maxHp * 0.5;
-    boss.rotorAngle += dt * (enraged ? 22 : 16);
+    const enraged = !boss.isMiniBoss && boss.hp < boss.maxHp * 0.55;
+    boss.rotorAngle += dt * (enraged ? 24 : 16);
+
+    if (!boss.isMiniBoss && !boss.summonedReinforcements && boss.hp < boss.maxHp * 0.65) {
+      boss.summonedReinforcements = true;
+      this.spawnBossReinforcements(boss);
+    }
 
     if (boss.z < boss.targetZ) {
       boss.z = Math.min(boss.targetZ, boss.z + 0.16 * dt);
     } else {
-      const speedMult = enraged ? 1.4 : 1;
+      const speedMult = (enraged ? 1.45 : 1) * (boss.kind === 'HELI' ? 1.25 : 1);
       boss.x += boss.vx * speedMult * dt;
       if (boss.x > 0.55) {
         boss.x = 0.55;
@@ -1261,7 +1409,7 @@ export class GameEngine {
               id: this.nextEntityId++,
               x: laneX,
               z: boss.z + 0.05,
-              speed: enraged ? 0.54 : 0.48,
+              speed: enraged ? 0.56 : 0.49,
               damage: Math.max(1, Math.round(((boss.isMiniBoss ? 2 : 3) + this.stage) * this.difficultyDmgMult * bossTypeDmgMult)),
               radius: 0.13,
             });
@@ -1272,16 +1420,24 @@ export class GameEngine {
         boss.attackTimer -= dt * this.speedMult;
         if (boss.attackTimer <= 0) {
           const bossTypeDmgMult = boss.isMiniBoss ? this.miniBossDmgMult : this.bossDmgMult;
-          const paceMult = bossTypeDmgMult > 1 ? 1.12 : bossTypeDmgMult < 1 ? 0.88 : 1;
-          boss.attackTimer = Math.max(0.75, ((boss.isMiniBoss ? 2.1 : enraged ? 1.35 : 1.75) - this.stage * 0.08) / paceMult);
-          const primary = Math.max(-0.68, Math.min(0.68, this.playerX + (Math.random() - 0.5) * 0.2));
+          const paceMult = bossTypeDmgMult > 1 ? 1.15 : bossTypeDmgMult < 1 ? 0.88 : 1;
+          boss.attackTimer = Math.max(0.68, ((boss.isMiniBoss ? 1.65 : enraged ? 1.15 : 1.45) - this.stage * 0.07) / paceMult);
+          const primary = Math.max(-0.68, Math.min(0.68, this.playerX + (Math.random() - 0.5) * 0.18));
+
           if (enraged) {
-            const offset = primary > 0 ? -0.46 : 0.46;
+            const leftLane = Math.max(-0.72, primary - 0.44);
+            const rightLane = Math.min(0.72, primary + 0.44);
+            boss.telegraphLanes =
+              boss.kind === 'TANK'
+                ? [-0.52, primary, 0.52]
+                : [leftLane, primary, rightLane];
+          } else if (!boss.isMiniBoss || boss.kind === 'TANK') {
+            const offset = primary > 0 ? -0.44 : 0.44;
             boss.telegraphLanes = [primary, Math.max(-0.7, Math.min(0.7, primary + offset))];
           } else {
             boss.telegraphLanes = [primary];
           }
-          boss.telegraphTimer = enraged ? 0.68 : 0.76;
+          boss.telegraphTimer = enraged ? 0.62 : 0.72;
         }
       }
     }
@@ -1294,7 +1450,7 @@ export class GameEngine {
       h.z += h.speed * this.speedMult * dt;
       if (h.z >= 0.9 && h.z <= 0.99 && Math.abs(h.x - this.playerX) < h.radius + 0.1) {
         this.hazards.splice(i, 1);
-        this.absorbOrDamageSquad(h.damage);
+        this.absorbOrDamageSquad(h.damage, `-${h.damage} Treffer`, true);
         continue;
       }
       if (h.z > 1.08) {
@@ -1412,8 +1568,9 @@ export class GameEngine {
     const hyperMult = this.hyperTimer > 0 ? 1.55 : 1;
     const effectiveRate = getFireRateMultiplier(this.upgrades) * this.tempFireRateBonus * hyperMult;
     const shotsPerSec = effectiveRate / spec.fireInterval;
+    const effectiveSquadPower = Math.pow(this.squadCount, 0.86);
     const dmgPerVolley =
-      this.squadCount * spec.damage * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * 0.45 * (this.hyperTimer > 0 ? 1.2 : 1);
+      effectiveSquadPower * spec.damage * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * 0.45 * (this.hyperTimer > 0 ? 1.2 : 1);
     const droneDps = this.droneCount * 8.5 * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * (1 / 0.34);
     const dps = Math.round(shotsPerSec * dmgPerVolley + droneDps);
 
@@ -1436,7 +1593,7 @@ export class GameEngine {
       bossHp: this.boss ? Math.max(0, Math.ceil(this.boss.hp)) : null,
       bossMaxHp: this.boss ? this.boss.maxHp : null,
       bossName: this.boss ? this.boss.name : null,
-      bossEnraged: this.boss ? !this.boss.isMiniBoss && this.boss.hp < this.boss.maxHp * 0.5 : false,
+      bossEnraged: this.boss ? !this.boss.isMiniBoss && this.boss.hp < this.boss.maxHp * 0.55 : false,
       bossIsMini: this.boss ? this.boss.isMiniBoss : false,
     });
   }
@@ -1638,6 +1795,13 @@ export class GameEngine {
       ctx.fillText(t.text, t.x, t.y);
     }
     ctx.globalAlpha = 1;
+
+    if (this.damageFlashTimer > 0) {
+      const alpha = Math.min(0.45, this.damageFlashTimer * 1.35);
+      ctx.strokeStyle = `rgba(239, 68, 68, ${alpha})`;
+      ctx.lineWidth = 14;
+      ctx.strokeRect(0, 0, w, h);
+    }
 
     ctx.restore();
   }
@@ -1846,6 +2010,7 @@ export class GameEngine {
     const isBrute = g.kind === 'BRUTE';
     const isRusher = g.kind === 'RUSHER';
     const isTurret = g.kind === 'TURRET';
+    const isBomber = g.kind === 'BOMBER';
 
     const visibleUnits = Math.min(g.count, g.units.length);
     let drawn = 0;
@@ -1869,18 +2034,41 @@ export class GameEngine {
         continue;
       }
 
-      const r = (isBrute ? 12 : isRusher ? 7.5 : 8) * up.scale;
-      const stride = Math.sin(this.elapsedTime * (isRusher ? 18 : 10) + drawn) * 1.6 * up.scale;
+      const r = (isBrute ? 12 : isBomber ? 9 : isRusher ? 7.5 : 8) * up.scale;
+      const stride = Math.sin(this.elapsedTime * (isRusher || isBomber ? 18 : 10) + drawn) * 1.6 * up.scale;
 
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath();
       ctx.ellipse(up.x, up.y + r * 0.3, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      if (isBomber) {
+        const pulse = 0.55 + 0.45 * Math.sin(this.elapsedTime * 14 + drawn);
+        ctx.fillStyle = g.flashTimer > 0 ? '#FFFFFF' : `rgba(249, 115, 22, ${0.85 + 0.15 * pulse})`;
+        ctx.beginPath();
+        ctx.roundRect(up.x - r * 0.78, up.y - r * 1.45 + stride, r * 1.56, r * 1.45, 5 * up.scale);
+        ctx.fill();
+        ctx.strokeStyle = '#FDE047';
+        ctx.lineWidth = Math.max(1.2, 1.8 * up.scale);
+        ctx.stroke();
+
+        ctx.fillStyle = pulse > 0.7 ? '#FEF08A' : '#EF4444';
+        ctx.beginPath();
+        ctx.arc(up.x, up.y - r * 1.65 + stride, r * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
       ctx.fillStyle = g.flashTimer > 0 ? '#FFFFFF' : isBrute ? '#991B1B' : isRusher ? '#EA580C' : '#DC2626';
       ctx.beginPath();
       ctx.roundRect(up.x - r * 0.75, up.y - r * 1.5 + stride, r * 1.5, r * 1.5, 4 * up.scale);
       ctx.fill();
+
+      if (isBrute && g.flashTimer <= 0) {
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = Math.max(1.5, 2.2 * up.scale);
+        ctx.stroke();
+      }
 
       ctx.fillStyle = g.flashTimer > 0 ? '#FFFFFF' : isBrute ? '#F87171' : isRusher ? '#FDBA74' : '#FCA5A5';
       ctx.beginPath();
@@ -1893,9 +2081,9 @@ export class GameEngine {
     ctx.textAlign = 'center';
     ctx.lineWidth = 3.5;
     ctx.strokeStyle = '#090D16';
-    const label = isTurret ? `TURRET ${g.count}` : `${g.count}`;
+    const label = isTurret ? `TURRET ${g.count}` : isBomber ? `BOM ${g.count}` : `${g.count}`;
     ctx.strokeText(label, baseProj.x, tagY);
-    ctx.fillStyle = isRusher ? '#FDBA74' : '#FCA5A5';
+    ctx.fillStyle = isBomber ? '#FDE047' : isRusher ? '#FDBA74' : '#FCA5A5';
     ctx.fillText(label, baseProj.x, tagY);
   }
 
@@ -1908,7 +2096,7 @@ export class GameEngine {
     const left = p.x - w / 2;
     const top = p.y - h;
     const flash = boss.flashTimer > 0;
-    const enraged = !boss.isMiniBoss && boss.hp < boss.maxHp * 0.5;
+    const enraged = !boss.isMiniBoss && boss.hp < boss.maxHp * 0.55;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.beginPath();
@@ -2031,7 +2219,14 @@ export class GameEngine {
       ctx.ellipse(p.x, p.y + 3, r * 0.85, r * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = this.hyperTimer > 0 ? '#D97706' : this.weaponTier === 'LASER' ? '#7E22CE' : '#0284C7';
+      const hurtFlash = this.damageFlashTimer > 0;
+      ctx.fillStyle = hurtFlash
+        ? '#DC2626'
+        : this.hyperTimer > 0
+        ? '#D97706'
+        : this.weaponTier === 'LASER'
+        ? '#7E22CE'
+        : '#0284C7';
       ctx.beginPath();
       ctx.roundRect(p.x - r * 0.72, p.y - r * 1.4 + stride, r * 1.44, r * 1.4, 4);
       ctx.fill();
@@ -2046,7 +2241,13 @@ export class GameEngine {
         ctx.fillRect(p.x + r * 0.55, p.y - r * 1.75 + stride, 3, r * 0.9);
       }
 
-      ctx.fillStyle = this.hyperTimer > 0 ? '#FEF08A' : this.weaponTier === 'LASER' ? '#D8B4FE' : '#7DD3FC';
+      ctx.fillStyle = hurtFlash
+        ? '#FCA5A5'
+        : this.hyperTimer > 0
+        ? '#FEF08A'
+        : this.weaponTier === 'LASER'
+        ? '#D8B4FE'
+        : '#7DD3FC';
       ctx.beginPath();
       ctx.arc(p.x, p.y - r * 1.58 + stride, r * 0.58, 0, Math.PI * 2);
       ctx.fill();
@@ -2088,6 +2289,7 @@ export class GameEngine {
     }
 
     const atCap = this.currentMaxSquad !== null && this.squadCount >= this.currentMaxSquad;
+    const hurtPill = this.damageFlashTimer > 0;
     const pillLabel =
       this.currentMaxSquad !== null ? `${this.squadCount}/${this.currentMaxSquad}` : `${this.squadCount}/∞`;
     const pillW = Math.max(66, pillLabel.length * 10 + 18);
@@ -2095,18 +2297,18 @@ export class GameEngine {
     const pillX = center.x - pillW / 2;
     const pillY = center.y - 48;
 
-    ctx.fillStyle = 'rgba(9, 13, 22, 0.9)';
+    ctx.fillStyle = hurtPill ? 'rgba(127, 29, 29, 0.94)' : 'rgba(9, 13, 22, 0.9)';
     ctx.beginPath();
     ctx.roundRect(pillX, pillY, pillW, pillH, 6);
     ctx.fill();
-    ctx.strokeStyle = this.hyperTimer > 0 ? '#FACC15' : atCap ? '#F59E0B' : '#38BDF8';
+    ctx.strokeStyle = hurtPill ? '#EF4444' : this.hyperTimer > 0 ? '#FACC15' : atCap ? '#F59E0B' : '#38BDF8';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     ctx.font = '700 14px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = atCap ? '#FDE68A' : '#F8FAFC';
+    ctx.fillStyle = hurtPill ? '#FECACA' : atCap ? '#FDE68A' : '#F8FAFC';
     ctx.fillText(pillLabel, center.x, pillY + pillH / 2 + 0.5);
   }
 }

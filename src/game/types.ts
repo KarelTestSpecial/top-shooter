@@ -1,26 +1,25 @@
 export type GameState = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER';
 
-export type StageLengthMode = 'NORMAL' | 'LONG' | 'MARATHON' | 'ULTRA';
-export type DifficultyMode = 'CHILL' | 'NORMAL' | 'CHAOS';
-export type SpeedMode = 'SLOW' | 'NORMAL' | 'TURBO';
-export type DensityMode = 'STANDARD' | 'BUSY' | 'EXTREME';
 export type BiomeChoice = 'AUTO' | 'COAST' | 'DESERT' | 'REACTOR';
-export type MaxSquadMode = '150' | '300' | '550' | '1500' | 'UNLIMITED';
-export type BossStrengthMode = 'WEAK' | 'NORMAL' | 'STRONG' | 'TITAN';
 
 export interface GameplaySettings {
-  stageLength: StageLengthMode;
-  difficulty: DifficultyMode;
-  gameSpeed: SpeedMode;
-  waveDensity: DensityMode;
+  stageLengthFactor: number; // 1.0 .. 6.0 (step 0.5)
+  gameSpeed: number; // 0.6 .. 1.6 (step 0.05)
+  enemyHpMult: number; // 0.5 .. 2.5 (step 0.1)
+  enemyCountMult: number; // 0.5 .. 2.5 (step 0.1)
+  enemyMaxGroupSize: number; // 15 .. 250 (step 5)
+  goldMult: number; // 0.5 .. 3.0 (step 0.1)
   startWeapon: WeaponTier;
-  startShield: number;
-  startDrones: number;
+  startShield: number; // 0 .. 5
+  startDrones: number; // 0 .. 6
   biomeChoice: BiomeChoice;
-  maxSquadCap: MaxSquadMode;
-  dynamicSquadCap: boolean;
-  miniBossStrength: BossStrengthMode;
-  bossStrength: BossStrengthMode;
+  maxSquadCap: number | null; // 50 .. 1250 or null (unlimited)
+  purpleGateFreq: number; // 0 .. 100 (%)
+  purpleDoubleChance: number; // 0 .. 100 (%)
+  purpleGateMin: number; // 50 .. 1000
+  purpleGateMax: number; // 100 .. 1250
+  miniBossMult: number; // 0.4 .. 4.0 (step 0.2)
+  bossMult: number; // 0.4 .. 4.0 (step 0.2)
 }
 
 export type WeaponTier = 'RIFLE' | 'DOUBLE' | 'SPREAD' | 'ROCKET' | 'LASER';
@@ -40,6 +39,7 @@ export interface PersistentProgress {
   upgrades: UpgradeLevels;
   muted: boolean;
   settings: GameplaySettings;
+  settingsVersion?: number;
 }
 
 export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP' | 'CAP_SET';
@@ -110,7 +110,7 @@ export interface EnemyGroup {
   maxCount: number;
   hpPerUnit: number;
   currentFrontHp: number;
-  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET';
+  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET' | 'BOMBER';
   fireTimer: number;
   flashTimer: number;
   units: EnemyUnit[];
@@ -133,6 +133,7 @@ export interface BossEntity {
   rotorAngle: number;
   telegraphLanes: number[];
   telegraphTimer: number;
+  summonedReinforcements?: boolean;
 }
 
 export interface EnemyHazard {
@@ -235,6 +236,6 @@ export interface HudSnapshot {
 
 export interface StageWaveEvent {
   atDistance: number;
-  type: 'GATE_PAIR' | 'GATE_TRIO' | 'BARRELS' | 'BARRIER' | 'ENEMIES' | 'MINIBOSS' | 'BOSS';
+  type: 'GATE_SINGLE' | 'GATE_PAIR' | 'GATE_TRIO' | 'BARRELS' | 'BARRIER' | 'ENEMIES' | 'MINIBOSS' | 'BOSS';
   payload: unknown;
 }
