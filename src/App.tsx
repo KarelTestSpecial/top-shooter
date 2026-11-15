@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Crosshair, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { Crosshair, Home, Pause, Play, RotateCcw, SlidersHorizontal, Square, Volume2, VolumeX } from 'lucide-react';
+import { SettingsModal } from './components/SettingsModal';
 import { UpgradePanel } from './components/UpgradePanel';
 import { GameEngine, WEAPON_LABELS } from './game/engine';
 import { sound } from './game/sound';
-import { getStartSquadCount, getUpgradeCost, STAGE_LENGTH_CONFIG } from './game/stages';
-import { GameState, HudSnapshot, PersistentProgress, StageLengthMode, UpgradeLevels } from './game/types';
+import {
+  BOSS_STRENGTH_CONFIG,
+  DEFAULT_GAMEPLAY_SETTINGS,
+  DENSITY_CONFIG,
+  DIFFICULTY_CONFIG,
+  MAX_SQUAD_CONFIG,
+  SPEED_CONFIG,
+  STAGE_LENGTH_CONFIG,
+  getStartSquadCount,
+  getUpgradeCost,
+} from './game/stages';
+import {
+  GameState,
+  GameplaySettings,
+  HudSnapshot,
+  PersistentProgress,
+  StageLengthMode,
+  UpgradeLevels,
+} from './game/types';
 
 const STORAGE_KEY = 'poortrush_progress_v1';
 
@@ -20,16 +38,16 @@ const DEFAULT_PROGRESS: PersistentProgress = {
     goldBonus: 0,
   },
   muted: false,
-  stageLength: 'NORMAL',
+  settings: DEFAULT_GAMEPLAY_SETTINGS,
 };
 
 function loadProgress(): PersistentProgress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PROGRESS;
-    const parsed = JSON.parse(raw) as Partial<PersistentProgress>;
-    const validLength: StageLengthMode =
-      parsed.stageLength === 'LONG' || parsed.stageLength === 'MARATHON' ? parsed.stageLength : 'NORMAL';
+    const parsed = JSON.parse(raw) as Partial<PersistentProgress> & { stageLength?: StageLengthMode };
+    const savedSettings = parsed.settings;
+    const legacyLength = parsed.stageLength;
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -42,7 +60,32 @@ function loadProgress(): PersistentProgress {
         goldBonus: parsed.upgrades?.goldBonus ?? 0,
       },
       muted: Boolean(parsed.muted),
-      stageLength: validLength,
+      settings: {
+        stageLength: savedSettings?.stageLength ?? legacyLength ?? DEFAULT_GAMEPLAY_SETTINGS.stageLength,
+        difficulty: savedSettings?.difficulty ?? DEFAULT_GAMEPLAY_SETTINGS.difficulty,
+        gameSpeed: savedSettings?.gameSpeed ?? DEFAULT_GAMEPLAY_SETTINGS.gameSpeed,
+        waveDensity: savedSettings?.waveDensity ?? DEFAULT_GAMEPLAY_SETTINGS.waveDensity,
+        startWeapon: savedSettings?.startWeapon ?? DEFAULT_GAMEPLAY_SETTINGS.startWeapon,
+        startShield: typeof savedSettings?.startShield === 'number' ? savedSettings.startShield : DEFAULT_GAMEPLAY_SETTINGS.startShield,
+        startDrones: typeof savedSettings?.startDrones === 'number' ? savedSettings.startDrones : DEFAULT_GAMEPLAY_SETTINGS.startDrones,
+        biomeChoice: savedSettings?.biomeChoice ?? DEFAULT_GAMEPLAY_SETTINGS.biomeChoice,
+        maxSquadCap:
+          savedSettings?.maxSquadCap && savedSettings.maxSquadCap in MAX_SQUAD_CONFIG
+            ? savedSettings.maxSquadCap
+            : DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap,
+        dynamicSquadCap:
+          typeof savedSettings?.dynamicSquadCap === 'boolean'
+            ? savedSettings.dynamicSquadCap
+            : DEFAULT_GAMEPLAY_SETTINGS.dynamicSquadCap,
+        miniBossStrength:
+          savedSettings?.miniBossStrength && savedSettings.miniBossStrength in BOSS_STRENGTH_CONFIG
+            ? savedSettings.miniBossStrength
+            : DEFAULT_GAMEPLAY_SETTINGS.miniBossStrength,
+        bossStrength:
+          savedSettings?.bossStrength && savedSettings.bossStrength in BOSS_STRENGTH_CONFIG
+            ? savedSettings.bossStrength
+            : DEFAULT_GAMEPLAY_SETTINGS.bossStrength,
+      },
     };
   } catch {
     return DEFAULT_PROGRESS;
@@ -53,6 +96,7 @@ export default function App() {
   const [progress, setProgress] = useState<PersistentProgress>(() => loadProgress());
   const [selectedStage, setSelectedStage] = useState<number>(() => loadProgress().highestStage);
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
+  const [showSettings, setShowSettings] = useState(false);
   const [runSummary, setRunSummary] = useState<{
     stage: number;
     runGold: number;
@@ -60,9 +104,12 @@ export default function App() {
     squadCount: number;
   } | null>(null);
 
-  const [hud, setHud] = useState<HudSnapshot>(() => ({
-    squadCount: getStartSquadCount(loadProgress().upgrades),
-    weaponTier: 'RIFLE',
+  const [hud, setHud] = useState<HudSnapshot>(() => {
+    const initial = loadProgress();
+    return {
+      squadCount: getStartSquadCount(initial.upgrades),
+      maxSquadLimit: MAX_SQUAD_CONFIG[initial.settings.maxSquadCap].cap,
+      weaponTier: 'RIFLE',
     shieldCharges: 0,
     droneCount: 0,
     hyperCharge: 0,
@@ -80,7 +127,8 @@ export default function App() {
     bossName: null,
     bossEnraged: false,
     bossIsMini: false,
-  }));
+  };
+  });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -162,6 +210,13 @@ export default function App() {
     return () => cancelAnimationFrame(frameId);
   }, [gameState]);
 
+  const goToTitleMenu = useCallback(() => {
+    engineRef.current?.stop();
+    setShowSettings(false);
+    setRunSummary(null);
+    setGameState('TITLE_MENU');
+  }, []);
+
   useEffect(() => {
     const updateDir = () => {
       const { left, right } = keysPressedRef.current;
@@ -182,7 +237,16 @@ export default function App() {
           sound.unlock();
           engineRef.current?.triggerAirstrike();
         }
+      } else if (e.key === 'q' || e.key === 'Q' || e.key === 'Backspace') {
+        if (!showSettings && (gameState === 'PLAYING' || gameState === 'PAUSED')) {
+          e.preventDefault();
+          goToTitleMenu();
+        }
       } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        if (showSettings) {
+          setShowSettings(false);
+          return;
+        }
         setGameState((curr) => {
           if (curr === 'PLAYING') {
             engineRef.current?.setPaused(true);
@@ -213,22 +277,29 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gameState]);
+  }, [gameState, showSettings, goToTitleMenu]);
 
   const startStage = useCallback(
-    (stageToPlay: number, lengthOverride?: StageLengthMode) => {
+    (stageToPlay: number) => {
       sound.unlock();
-      const mode = lengthOverride ?? progress.stageLength;
+      setShowSettings(false);
       setSelectedStage(stageToPlay);
       setRunSummary(null);
       setGameState('PLAYING');
-      engineRef.current?.startStage(stageToPlay, progress.upgrades, mode);
+      engineRef.current?.startStage(stageToPlay, progress.upgrades, progress.settings);
     },
-    [progress.upgrades, progress.stageLength],
+    [progress.upgrades, progress.settings],
   );
 
+  const updateSettings = useCallback((nextSettings: GameplaySettings) => {
+    setProgress((prev) => ({ ...prev, settings: nextSettings }));
+  }, []);
+
   const setStageLength = useCallback((mode: StageLengthMode) => {
-    setProgress((prev) => ({ ...prev, stageLength: mode }));
+    setProgress((prev) => ({
+      ...prev,
+      settings: { ...prev.settings, stageLength: mode },
+    }));
   }, []);
 
   const togglePause = useCallback(() => {
@@ -269,6 +340,8 @@ export default function App() {
   };
 
   const airstrikeReady = hud.airstrikeCharge >= 100;
+  const s = progress.settings;
+  const settingsSummary = `${DIFFICULTY_CONFIG[s.difficulty].label} · ${SPEED_CONFIG[s.gameSpeed].label} · ${MAX_SQUAD_CONFIG[s.maxSquadCap].shortLabel} · ${WEAPON_LABELS[s.startWeapon].split(' ')[0]}`;
 
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#090D16] text-slate-100 select-none">
@@ -277,10 +350,7 @@ export default function App() {
         <div className="flex items-center gap-6 min-w-0">
           <button
             type="button"
-            onClick={() => {
-              engineRef.current?.stop();
-              setGameState('TITLE_MENU');
-            }}
+            onClick={goToTitleMenu}
             className="font-display text-2xl font-extrabold tracking-tight text-white hover:text-sky-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             PoortRush
@@ -302,6 +372,17 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {gameState !== 'PLAYING' && gameState !== 'PAUSED' && (
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs font-medium text-slate-200 hover:border-sky-500/60 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-sky-400" />
+              <span className="hidden sm:inline">Parameters</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setProgress((prev) => ({ ...prev, muted: !prev.muted }))}
@@ -313,14 +394,26 @@ export default function App() {
           </button>
 
           {(gameState === 'PLAYING' || gameState === 'PAUSED') && (
-            <button
-              type="button"
-              onClick={togglePause}
-              className="flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-            >
-              {gameState === 'PAUSED' ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-              <span>{gameState === 'PAUSED' ? 'Hervatten' : 'Pauzeren'}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={togglePause}
+                title={gameState === 'PAUSED' ? 'Hervatten (P / Esc)' : 'Pauzeren (P / Esc)'}
+                className="flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              >
+                {gameState === 'PAUSED' ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                <span>{gameState === 'PAUSED' ? 'Hervatten' : 'Pauzeren'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={goToTitleMenu}
+                title="Run stoppen (Q of Backspace)"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-red-900/70 bg-red-950/60 px-3 text-xs font-semibold text-red-200 hover:bg-red-900/80 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                <span>Stop</span>
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -332,6 +425,7 @@ export default function App() {
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="text-slate-400 whitespace-nowrap">
               Squad <strong className="font-mono-num text-sky-400 text-sm">{hud.squadCount}</strong>
+              <span className="font-mono-num text-slate-500">/{hud.maxSquadLimit ?? '∞'}</span>
             </span>
             <span aria-hidden="true" className="text-slate-600">·</span>
             <span className="text-slate-200 font-medium truncate">{WEAPON_LABELS[hud.weaponTier]}</span>
@@ -425,53 +519,29 @@ export default function App() {
           {/* TITLE MENU OVERLAY */}
           {gameState === 'TITLE_MENU' && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
-              <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl space-y-5">
-                <div className="space-y-1.5">
+              <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900/95 p-5 sm:p-6 shadow-2xl space-y-4">
+                <div className="space-y-1">
                   <p className="text-xs font-semibold text-sky-400">Pure Arcade · Nul Wachttijden</p>
-                  <h1 className="font-display text-4xl font-extrabold tracking-tight text-white text-balance leading-none">
+                  <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-white text-balance leading-none">
                     Schuif, Schiet &amp; Vermenigvuldig
                   </h1>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Kies rekenpoortjes, blaas TNT-vaten op voor kettingreacties, upgrade naar het Plasmakanon en roep luchtaanvallen in.
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Kies rekenpoortjes, blaas TNT-vaten op, pak wapenkisten en stel je eigen speelstijl in.
                   </p>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-slate-300 border-t border-b border-slate-800 py-3">
-                  <div className="flex items-center justify-between">
-                    <span>Besturing</span>
-                    <span className="font-mono-num text-slate-200">Muis / Touch of A / D</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Luchtaanval</span>
-                    <span className="font-mono-num text-rose-300">Spatie of tik op knop</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Slimme Truc</span>
-                    <span className="text-sky-300">Schiet op rode poortjes om ze positief te maken</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-300">Stage-lengte</span>
-                    <span className="text-slate-400">
-                      {progress.stageLength === 'NORMAL'
-                        ? 'Standaard tempo'
-                        : progress.stageLength === 'LONG'
-                        ? '2× langer · +40% eindbaas goud'
-                        : '3,5× marathon · +85% eindbaas goud'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
-                    {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
+                {/* Stage-lengte & Parameters Bar */}
+                <div className="space-y-2 border-t border-b border-slate-800 py-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
+                    {(['NORMAL', 'LONG', 'MARATHON', 'ULTRA'] as StageLengthMode[]).map((mode) => {
                       const cfg = STAGE_LENGTH_CONFIG[mode];
-                      const active = progress.stageLength === mode;
+                      const active = s.stageLength === mode;
                       return (
                         <button
                           key={mode}
                           type="button"
                           onClick={() => setStageLength(mode)}
-                          className={`rounded-md px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                          className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                             active
                               ? 'bg-sky-500 text-slate-950'
                               : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -482,6 +552,18 @@ export default function App() {
                       );
                     })}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(true)}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs hover:border-sky-500/60 hover:bg-slate-800/70 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 font-semibold text-slate-200 whitespace-nowrap">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-sky-400" />
+                      <span>Spelparameters aanpassen</span>
+                    </span>
+                    <span className="text-slate-400 truncate">{settingsSummary}</span>
+                  </button>
                 </div>
 
                 {progress.highestStage > 1 && (
@@ -547,6 +629,14 @@ export default function App() {
                     <RotateCcw className="h-4 w-4" />
                     <span>Opnieuw Spelen</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={goToTitleMenu}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Home className="h-4 w-4" />
+                    <span>Terug naar Start</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -555,7 +645,7 @@ export default function App() {
           {/* STAGE CLEAR OVERLAY */}
           {gameState === 'STAGE_CLEAR' && runSummary && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
-              <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-5">
+              <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl space-y-4">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-emerald-400">Eindbaas Verslagen</p>
                   <h2 className="font-display text-4xl font-extrabold text-white">Stage {runSummary.stage} Gehaald</h2>
@@ -576,30 +666,31 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
-                  {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
-                    const cfg = STAGE_LENGTH_CONFIG[mode];
-                    const active = progress.stageLength === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setStageLength(mode)}
-                        className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
-                          active
-                            ? 'bg-sky-500 text-slate-950'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {cfg.label} ({cfg.factorLabel})
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(true)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs hover:border-sky-500/60 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 font-semibold text-slate-200 whitespace-nowrap">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Spelparameters</span>
+                  </span>
+                  <span className="text-slate-400 truncate">
+                    {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel}) · {settingsSummary}
+                  </span>
+                </button>
 
                 <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
 
-                <div className="flex gap-2.5">
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <button
+                    type="button"
+                    onClick={goToTitleMenu}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Home className="h-4 w-4" />
+                    <span>Startmenu</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => startStage(runSummary.stage + 1)}
@@ -616,7 +707,7 @@ export default function App() {
           {/* GAME OVER OVERLAY */}
           {gameState === 'GAME_OVER' && runSummary && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4 overflow-y-auto">
-              <div className="w-full max-w-lg rounded-xl border border-red-900/60 bg-slate-900 p-6 shadow-2xl space-y-5">
+              <div className="w-full max-w-lg rounded-xl border border-red-900/60 bg-slate-900 p-6 shadow-2xl space-y-4">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-red-400">Squad Uitgeschakeld</p>
                   <h2 className="font-display text-4xl font-extrabold text-white">Geen Soldaten Meer</h2>
@@ -637,30 +728,31 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-1 border border-slate-800">
-                  {(['NORMAL', 'LONG', 'MARATHON'] as StageLengthMode[]).map((mode) => {
-                    const cfg = STAGE_LENGTH_CONFIG[mode];
-                    const active = progress.stageLength === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setStageLength(mode)}
-                        className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
-                          active
-                            ? 'bg-sky-500 text-slate-950'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {cfg.label} ({cfg.factorLabel})
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(true)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs hover:border-sky-500/60 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 font-semibold text-slate-200 whitespace-nowrap">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Spelparameters</span>
+                  </span>
+                  <span className="text-slate-400 truncate">
+                    {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel}) · {settingsSummary}
+                  </span>
+                </button>
 
                 <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
 
-                <div className="flex gap-2.5">
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <button
+                    type="button"
+                    onClick={goToTitleMenu}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Home className="h-4 w-4" />
+                    <span>Terug naar Start</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => startStage(runSummary.stage)}
@@ -673,6 +765,11 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* SETTINGS MODAL */}
+          {showSettings && (
+            <SettingsModal settings={s} onChange={updateSettings} onClose={() => setShowSettings(false)} />
+          )}
         </div>
 
         {/* Desktop Tactical Command Panel */}
@@ -680,7 +777,7 @@ export default function App() {
           <div className="space-y-4">
             <div>
               <div className="text-xs font-medium text-slate-400">
-                {hud.biomeName} · {STAGE_LENGTH_CONFIG[progress.stageLength].label} ({STAGE_LENGTH_CONFIG[progress.stageLength].factorLabel})
+                {hud.biomeName} · {STAGE_LENGTH_CONFIG[s.stageLength].label} ({STAGE_LENGTH_CONFIG[s.stageLength].factorLabel})
               </div>
               <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="font-display text-3xl font-extrabold text-white">Stage {hud.stage}</span>
@@ -732,7 +829,18 @@ export default function App() {
             <div className="space-y-2 border-t border-slate-800 pt-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Soldaten</span>
-                <span className="font-mono-num text-2xl font-bold text-sky-400">{hud.squadCount}</span>
+                <span className="font-mono-num text-right">
+                  <strong
+                    className={`text-2xl font-bold ${
+                      hud.maxSquadLimit !== null && hud.squadCount >= hud.maxSquadLimit
+                        ? 'text-amber-300'
+                        : 'text-sky-400'
+                    }`}
+                  >
+                    {hud.squadCount}
+                  </strong>
+                  <span className="text-xs text-slate-500 ml-1">/ {hud.maxSquadLimit ?? '∞'}</span>
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Wapen</span>
@@ -762,9 +870,15 @@ export default function App() {
           </div>
 
           <div className="space-y-2 border-t border-slate-800 pt-3.5 text-xs text-slate-400">
-            <div className="font-medium text-slate-300">Tactische Tips</div>
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-300">Actieve Instellingen</span>
+              <span className="text-slate-500">{DIFFICULTY_CONFIG[s.difficulty].label}</span>
+            </div>
             <p className="leading-relaxed">
-              Schiet rode <strong className="text-red-400">TNT-vaten</strong> kapot tussen vijanden voor kettingreacties, en gebruik <strong className="text-rose-300">Spatie</strong> voor een Luchtaanval tijdens eindbazen.
+              {SPEED_CONFIG[s.gameSpeed].label} tempo · {DENSITY_CONFIG[s.waveDensity].label} hordes ·{' '}
+              {MAX_SQUAD_CONFIG[s.maxSquadCap].shortLabel} · {s.dynamicSquadCap ? 'MAX-poorten aan' : 'MAX-poorten uit'} ·{' '}
+              Mini {BOSS_STRENGTH_CONFIG[s.miniBossStrength].factorLabel} · Baas {BOSS_STRENGTH_CONFIG[s.bossStrength].factorLabel} ·{' '}
+              {WEAPON_LABELS[s.startWeapon]}
             </p>
           </div>
         </aside>

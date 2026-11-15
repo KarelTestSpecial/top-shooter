@@ -1,6 +1,27 @@
 export type GameState = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER';
 
-export type StageLengthMode = 'NORMAL' | 'LONG' | 'MARATHON';
+export type StageLengthMode = 'NORMAL' | 'LONG' | 'MARATHON' | 'ULTRA';
+export type DifficultyMode = 'CHILL' | 'NORMAL' | 'CHAOS';
+export type SpeedMode = 'SLOW' | 'NORMAL' | 'TURBO';
+export type DensityMode = 'STANDARD' | 'BUSY' | 'EXTREME';
+export type BiomeChoice = 'AUTO' | 'COAST' | 'DESERT' | 'REACTOR';
+export type MaxSquadMode = '150' | '300' | '550' | '1500' | 'UNLIMITED';
+export type BossStrengthMode = 'WEAK' | 'NORMAL' | 'STRONG' | 'TITAN';
+
+export interface GameplaySettings {
+  stageLength: StageLengthMode;
+  difficulty: DifficultyMode;
+  gameSpeed: SpeedMode;
+  waveDensity: DensityMode;
+  startWeapon: WeaponTier;
+  startShield: number;
+  startDrones: number;
+  biomeChoice: BiomeChoice;
+  maxSquadCap: MaxSquadMode;
+  dynamicSquadCap: boolean;
+  miniBossStrength: BossStrengthMode;
+  bossStrength: BossStrengthMode;
+}
 
 export type WeaponTier = 'RIFLE' | 'DOUBLE' | 'SPREAD' | 'ROCKET' | 'LASER';
 
@@ -18,10 +39,10 @@ export interface PersistentProgress {
   totalKills: number;
   upgrades: UpgradeLevels;
   muted: boolean;
-  stageLength: StageLengthMode;
+  settings: GameplaySettings;
 }
 
-export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP';
+export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP' | 'CAP_SET';
 
 export interface GateEntity {
   id: number;
@@ -191,6 +212,7 @@ export interface FloatingText {
 
 export interface HudSnapshot {
   squadCount: number;
+  maxSquadLimit: number | null;
   weaponTier: WeaponTier;
   shieldCharges: number;
   droneCount: number;

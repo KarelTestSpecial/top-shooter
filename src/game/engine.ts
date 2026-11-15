@@ -1,8 +1,12 @@
 import {
+  BOSS_STRENGTH_CONFIG,
   BarrelSpec,
   BarrierSpec,
+  DIFFICULTY_CONFIG,
   EnemySpec,
   GateSpec,
+  MAX_SQUAD_CONFIG,
+  SPEED_CONFIG,
   STAGE_LENGTH_CONFIG,
   generateStageEvents,
   getFireRateMultiplier,
@@ -21,11 +25,11 @@ import {
   EnemyGroup,
   EnemyHazard,
   FloatingText,
+  GameplaySettings,
   GateEntity,
   HudSnapshot,
   Particle,
   Shockwave,
-  StageLengthMode,
   StageWaveEvent,
   UpgradeLevels,
   WeaponTier,
@@ -133,6 +137,7 @@ export class GameEngine {
   private targetX = 0;
   private keyboardDir = 0;
   private squadCount = 8;
+  private currentMaxSquad: number | null = 550;
   private maxSquadReached = 8;
   private weaponTier: WeaponTier = 'RIFLE';
   private shieldCharges = 0;
@@ -150,6 +155,11 @@ export class GameEngine {
   // Stage state
   private stage = 1;
   private stageLengthUnits = 190;
+  private speedMult = 1;
+  private difficultyGoldMult = 1;
+  private difficultyDmgMult = 1;
+  private miniBossDmgMult = 1;
+  private bossDmgMult = 1;
   private biome: BiomeTheme = BIOMES[0];
   private distance = 0;
   private scrollSpeed = 7.6;
@@ -206,19 +216,30 @@ export class GameEngine {
     this.render();
   }
 
-  startStage(stage: number, upgrades: UpgradeLevels, lengthMode: StageLengthMode = 'NORMAL') {
+  startStage(stage: number, upgrades: UpgradeLevels, settings: GameplaySettings) {
     this.stage = stage;
-    this.stageLengthUnits = STAGE_LENGTH_CONFIG[lengthMode].units;
-    this.biome = BIOMES[(stage - 1) % BIOMES.length];
+    this.stageLengthUnits = STAGE_LENGTH_CONFIG[settings.stageLength].units;
+    this.speedMult = SPEED_CONFIG[settings.gameSpeed].mult;
+    this.difficultyGoldMult = DIFFICULTY_CONFIG[settings.difficulty].goldMult;
+    this.difficultyDmgMult = DIFFICULTY_CONFIG[settings.difficulty].dmgMult;
+    this.miniBossDmgMult = BOSS_STRENGTH_CONFIG[settings.miniBossStrength].dmgMult;
+    this.bossDmgMult = BOSS_STRENGTH_CONFIG[settings.bossStrength].dmgMult;
+
+    if (settings.biomeChoice === 'COAST') this.biome = BIOMES[0];
+    else if (settings.biomeChoice === 'DESERT') this.biome = BIOMES[1];
+    else if (settings.biomeChoice === 'REACTOR') this.biome = BIOMES[2];
+    else this.biome = BIOMES[(stage - 1) % BIOMES.length];
+
+    this.currentMaxSquad = MAX_SQUAD_CONFIG[settings.maxSquadCap].cap;
     this.upgrades = { ...upgrades };
     this.playerX = 0;
     this.targetX = 0;
     this.keyboardDir = 0;
-    this.squadCount = getStartSquadCount(upgrades);
+    this.squadCount = this.clampSquad(getStartSquadCount(upgrades));
     this.maxSquadReached = this.squadCount;
-    this.weaponTier = 'RIFLE';
-    this.shieldCharges = 0;
-    this.droneCount = 0;
+    this.weaponTier = settings.startWeapon;
+    this.shieldCharges = settings.startShield;
+    this.droneCount = settings.startDrones;
     this.droneCooldown = 0;
     this.hyperCharge = 0;
     this.hyperTimer = 0;
@@ -229,8 +250,8 @@ export class GameEngine {
     this.tempDamageBonus = 1;
 
     this.distance = 0;
-    this.scrollSpeed = 7.6 + Math.min(2.6, (stage - 1) * 0.35);
-    this.events = generateStageEvents(stage, lengthMode);
+    this.scrollSpeed = (7.6 + Math.min(2.6, (stage - 1) * 0.35)) * this.speedMult;
+    this.events = generateStageEvents(stage, settings);
     this.nextEventIndex = 0;
     this.bossSpawned = false;
     this.runGold = 0;
@@ -371,9 +392,9 @@ export class GameEngine {
     const activeBoss = this.boss !== null;
     if (!activeBoss) {
       this.distance += this.scrollSpeed * dt;
-      this.roadScroll = (this.roadScroll + dt * 1.48) % 1;
+      this.roadScroll = (this.roadScroll + dt * 1.48 * this.speedMult) % 1;
     } else {
-      this.roadScroll = (this.roadScroll + dt * 0.35) % 1;
+      this.roadScroll = (this.roadScroll + dt * 0.35 * this.speedMult) % 1;
     }
 
     while (this.nextEventIndex < this.events.length && this.distance >= this.events[this.nextEventIndex].atDistance) {
@@ -448,7 +469,10 @@ export class GameEngine {
 
   private awardGold(baseAmount: number, worldX?: number, worldY?: number) {
     const hyperMult = this.hyperTimer > 0 ? 2 : 1;
-    const earned = Math.max(1, Math.round(baseAmount * getGoldMultiplier(this.upgrades) * hyperMult));
+    const earned = Math.max(
+      1,
+      Math.round(baseAmount * getGoldMultiplier(this.upgrades) * this.difficultyGoldMult * hyperMult),
+    );
     this.runGold += earned;
     if (worldX !== undefined && worldY !== undefined) {
       const coinCount = Math.min(6, Math.max(1, Math.ceil(earned / 6)));
@@ -1005,7 +1029,7 @@ export class GameEngine {
   }
 
   private updateGates(dt: number) {
-    const zSpeed = 0.25;
+    const zSpeed = 0.25 * this.speedMult;
     for (let i = this.gates.length - 1; i >= 0; i--) {
       const g = this.gates[i];
       g.z += zSpeed * dt;
@@ -1050,7 +1074,7 @@ export class GameEngine {
       return;
     } else if (g.op === 'MUL') {
       const before = this.squadCount;
-      this.squadCount = Math.min(550, this.squadCount * g.value);
+      this.squadCount = this.clampSquad(this.squadCount * g.value);
       this.maxSquadReached = Math.max(this.maxSquadReached, this.squadCount);
       label = `×${g.value} (${this.squadCount - before}+)`;
     } else if (g.op === 'DIV') {
@@ -1063,6 +1087,42 @@ export class GameEngine {
     } else if (g.op === 'DMG_UP') {
       this.tempDamageBonus = Math.min(2.8, this.tempDamageBonus + g.value / 100);
       label = `+${g.value}% Vuurkracht`;
+    } else if (g.op === 'CAP_SET') {
+      const prevCap = this.currentMaxSquad;
+      const prevSquad = this.squadCount;
+      this.currentMaxSquad = g.value;
+      if (this.squadCount > g.value) {
+        this.squadCount = g.value;
+      }
+      const lost = prevSquad - this.squadCount;
+      const lowered = prevCap === null || g.value < prevCap;
+
+      if (lowered) {
+        sound.playNegativeGate();
+        if (lost > 0) {
+          this.comboCount = 0;
+          this.spawnParticles(proj.x, proj.y, '#EF4444', 14);
+          this.spawnFloatingText(proj.x, proj.y - 30, `MAX ${g.value} (-${lost} Soldaten!)`, '#FB923C', 1.25);
+          if (!this.reducedMotion) this.shakeIntensity = 6;
+        } else {
+          this.spawnParticles(proj.x, proj.y, '#C084FC', 10);
+          this.spawnFloatingText(proj.x, proj.y - 30, `MAX LIMIET -> ${g.value}`, '#E9D5FF', 1.2);
+        }
+        return;
+      }
+
+      if (prevCap === g.value) {
+        sound.playPositiveGate();
+        this.spawnFloatingText(proj.x, proj.y - 30, `MAX BLIJFT ${g.value}`, '#E9D5FF', 1.15);
+        return;
+      }
+
+      sound.playPositiveGate();
+      this.addHyperCharge(10);
+      this.spawnParticles(proj.x, proj.y, '#C084FC', 14);
+      this.spawnShockwave(proj.x, proj.y, '#A855F7', 68);
+      this.spawnFloatingText(proj.x, proj.y - 34, `MAX LIMIET -> ${g.value}!`, '#E9D5FF', 1.25);
+      return;
     }
 
     sound.playPositiveGate();
@@ -1072,13 +1132,17 @@ export class GameEngine {
     this.spawnFloatingText(proj.x, proj.y - 34, label, '#38BDF8', 1.25);
   }
 
+  private clampSquad(value: number): number {
+    return this.currentMaxSquad === null ? value : Math.min(this.currentMaxSquad, value);
+  }
+
   private addSquad(amount: number) {
-    this.squadCount = Math.min(550, this.squadCount + amount);
+    this.squadCount = this.clampSquad(this.squadCount + amount);
     this.maxSquadReached = Math.max(this.maxSquadReached, this.squadCount);
   }
 
   private updateBarriers(dt: number) {
-    const zSpeed = 0.25;
+    const zSpeed = 0.25 * this.speedMult;
     for (let i = this.barriers.length - 1; i >= 0; i--) {
       const br = this.barriers[i];
       if (br.destroyed) {
@@ -1100,7 +1164,7 @@ export class GameEngine {
   }
 
   private updateBarrels(dt: number) {
-    const zSpeed = 0.25;
+    const zSpeed = 0.25 * this.speedMult;
     for (let i = this.barrels.length - 1; i >= 0; i--) {
       const b = this.barrels[i];
       if (b.destroyed) {
@@ -1136,9 +1200,9 @@ export class GameEngine {
         continue;
       }
 
-      g.z += g.speed * dt;
+      g.z += g.speed * this.speedMult * dt;
       if (g.kind === 'TURRET') {
-        g.fireTimer -= dt;
+        g.fireTimer -= dt * this.speedMult;
         if (g.fireTimer <= 0 && g.z < 0.8) {
           g.fireTimer = Math.max(1.25, 1.85 - this.stage * 0.08);
           this.hazards.push({
@@ -1146,7 +1210,7 @@ export class GameEngine {
             x: g.x,
             z: g.z + 0.03,
             speed: 0.46,
-            damage: 2 + Math.floor(this.stage * 0.5),
+            damage: Math.max(1, Math.round((2 + Math.floor(this.stage * 0.5)) * this.difficultyDmgMult)),
             radius: 0.1,
           });
         }
@@ -1189,24 +1253,27 @@ export class GameEngine {
       }
 
       if (boss.telegraphLanes.length > 0) {
-        boss.telegraphTimer -= dt;
+        boss.telegraphTimer -= dt * this.speedMult;
         if (boss.telegraphTimer <= 0) {
+          const bossTypeDmgMult = boss.isMiniBoss ? this.miniBossDmgMult : this.bossDmgMult;
           for (const laneX of boss.telegraphLanes) {
             this.hazards.push({
               id: this.nextEntityId++,
               x: laneX,
               z: boss.z + 0.05,
               speed: enraged ? 0.54 : 0.48,
-              damage: (boss.isMiniBoss ? 2 : 3) + this.stage,
+              damage: Math.max(1, Math.round(((boss.isMiniBoss ? 2 : 3) + this.stage) * this.difficultyDmgMult * bossTypeDmgMult)),
               radius: 0.13,
             });
           }
           boss.telegraphLanes = [];
         }
       } else {
-        boss.attackTimer -= dt;
+        boss.attackTimer -= dt * this.speedMult;
         if (boss.attackTimer <= 0) {
-          boss.attackTimer = Math.max(0.85, (boss.isMiniBoss ? 2.1 : enraged ? 1.35 : 1.75) - this.stage * 0.08);
+          const bossTypeDmgMult = boss.isMiniBoss ? this.miniBossDmgMult : this.bossDmgMult;
+          const paceMult = bossTypeDmgMult > 1 ? 1.12 : bossTypeDmgMult < 1 ? 0.88 : 1;
+          boss.attackTimer = Math.max(0.75, ((boss.isMiniBoss ? 2.1 : enraged ? 1.35 : 1.75) - this.stage * 0.08) / paceMult);
           const primary = Math.max(-0.68, Math.min(0.68, this.playerX + (Math.random() - 0.5) * 0.2));
           if (enraged) {
             const offset = primary > 0 ? -0.46 : 0.46;
@@ -1224,7 +1291,7 @@ export class GameEngine {
   private updateHazards(dt: number) {
     for (let i = this.hazards.length - 1; i >= 0; i--) {
       const h = this.hazards[i];
-      h.z += h.speed * dt;
+      h.z += h.speed * this.speedMult * dt;
       if (h.z >= 0.9 && h.z <= 0.99 && Math.abs(h.x - this.playerX) < h.radius + 0.1) {
         this.hazards.splice(i, 1);
         this.absorbOrDamageSquad(h.damage);
@@ -1352,6 +1419,7 @@ export class GameEngine {
 
     this.callbacks.onHudUpdate({
       squadCount: this.squadCount,
+      maxSquadLimit: this.currentMaxSquad,
       weaponTier: this.weaponTier,
       shieldCharges: this.shieldCharges,
       droneCount: this.droneCount,
@@ -1612,14 +1680,20 @@ export class GameEngine {
     const leftX = p.x - gateW / 2;
     const topY = p.y - gateH;
 
+    const isCapGate = g.op === 'CAP_SET';
     const isPositive =
-      g.op === 'MUL' || g.op === 'RATE_UP' || g.op === 'DMG_UP' || (g.op === 'ADD' && g.value >= 0);
+      g.op === 'MUL' ||
+      g.op === 'RATE_UP' ||
+      g.op === 'DMG_UP' ||
+      (g.op === 'ADD' && g.value >= 0);
 
-    const baseColor = isPositive ? '#0EA5E9' : '#EF4444';
-    const lightColor = isPositive ? '#7DD3FC' : '#FCA5A5';
+    const baseColor = isCapGate ? '#A855F7' : isPositive ? '#0EA5E9' : '#EF4444';
+    const lightColor = isCapGate ? '#E9D5FF' : isPositive ? '#7DD3FC' : '#FCA5A5';
     const bgFill =
       g.flashTimer > 0
         ? 'rgba(255, 255, 255, 0.35)'
+        : isCapGate
+        ? 'rgba(168, 85, 247, 0.26)'
         : isPositive
         ? 'rgba(14, 165, 233, 0.24)'
         : 'rgba(239, 68, 68, 0.24)';
@@ -1640,16 +1714,27 @@ export class GameEngine {
     else if (g.op === 'DIV') label = `÷${g.value}`;
     else if (g.op === 'RATE_UP') label = `+${g.value}% SNEL`;
     else if (g.op === 'DMG_UP') label = `+${g.value}% KRACHT`;
+    else if (g.op === 'CAP_SET') label = `MAX ${g.value}`;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const fontSize = Math.max(14, Math.round((g.op === 'RATE_UP' || g.op === 'DMG_UP' ? 20 : 28) * p.scale));
+    const fontSize = Math.max(
+      14,
+      Math.round((g.op === 'RATE_UP' || g.op === 'DMG_UP' || g.op === 'CAP_SET' ? 21 : 28) * p.scale),
+    );
     ctx.font = `800 ${fontSize}px "Barlow Condensed", sans-serif`;
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(9, 13, 22, 0.9)';
-    ctx.strokeText(label, p.x, topY + gateH * 0.46);
+    ctx.strokeText(label, p.x, topY + gateH * (isCapGate ? 0.44 : 0.46));
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(label, p.x, topY + gateH * 0.46);
+    ctx.fillText(label, p.x, topY + gateH * (isCapGate ? 0.44 : 0.46));
+
+    if (isCapGate) {
+      const subFont = Math.max(9, Math.round(10 * p.scale));
+      ctx.font = `700 ${subFont}px "Plus Jakarta Sans", sans-serif`;
+      ctx.fillStyle = '#E9D5FF';
+      ctx.fillText('LIMIET', p.x, topY + gateH * 0.8);
+    }
 
     if (g.shootable) {
       const subFont = Math.max(10, Math.round(11 * p.scale));
@@ -2002,7 +2087,10 @@ export class GameEngine {
       ctx.stroke();
     }
 
-    const pillW = 56;
+    const atCap = this.currentMaxSquad !== null && this.squadCount >= this.currentMaxSquad;
+    const pillLabel =
+      this.currentMaxSquad !== null ? `${this.squadCount}/${this.currentMaxSquad}` : `${this.squadCount}/∞`;
+    const pillW = Math.max(66, pillLabel.length * 10 + 18);
     const pillH = 24;
     const pillX = center.x - pillW / 2;
     const pillY = center.y - 48;
@@ -2011,14 +2099,14 @@ export class GameEngine {
     ctx.beginPath();
     ctx.roundRect(pillX, pillY, pillW, pillH, 6);
     ctx.fill();
-    ctx.strokeStyle = this.hyperTimer > 0 ? '#FACC15' : '#38BDF8';
+    ctx.strokeStyle = this.hyperTimer > 0 ? '#FACC15' : atCap ? '#F59E0B' : '#38BDF8';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.font = '700 15px "JetBrains Mono", monospace';
+    ctx.font = '700 14px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#F8FAFC';
-    ctx.fillText(String(this.squadCount), center.x, pillY + pillH / 2 + 0.5);
+    ctx.fillStyle = atCap ? '#FDE68A' : '#F8FAFC';
+    ctx.fillText(pillLabel, center.x, pillY + pillH / 2 + 0.5);
   }
 }
