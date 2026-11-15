@@ -35,7 +35,7 @@ export function getStageLengthMetrics(factor: number) {
 
 export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   stageLengthFactor: 1,
-  gameSpeed: 1.1,
+  gameSpeed: 1.0,
   enemyHpMult: 1.3,
   enemyCountMult: 1.35,
   enemyMaxGroupSize: 140,

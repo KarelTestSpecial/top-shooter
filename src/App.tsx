@@ -35,7 +35,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
-  settingsVersion: 5,
+  settingsVersion: 6,
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -182,6 +182,12 @@ function loadProgress(): PersistentProgress {
       if (goldMult === 1.15) goldMult = DEFAULT_GAMEPLAY_SETTINGS.goldMult;
     }
 
+    // v6: 100% tempo is de nieuwe standaard. De oude 90%- en 110%-waarden
+    // worden naar 100% getrokken; een bewust afwijkend tempo blijft behouden.
+    if ((parsed.settingsVersion ?? 1) < 6) {
+      if (gameSpeed === 0.9 || gameSpeed === 1.1) gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+    }
+
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
@@ -213,7 +219,7 @@ function loadProgress(): PersistentProgress {
         miniBossMult,
         bossMult,
       },
-      settingsVersion: 5,
+      settingsVersion: 6,
     };
   } catch {
     return DEFAULT_PROGRESS;

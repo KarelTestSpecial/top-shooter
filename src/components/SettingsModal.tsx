@@ -14,7 +14,7 @@ interface SettingsModalProps {
 const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> = [
   {
     label: 'Standaard Arcade',
-    desc: '110% tempo · 130% HP · 135% vijanden · 1,5× Bazen',
+    desc: '100% tempo · 130% HP · 135% vijanden · 1,5× Bazen',
     values: DEFAULT_GAMEPLAY_SETTINGS,
   },
   {
