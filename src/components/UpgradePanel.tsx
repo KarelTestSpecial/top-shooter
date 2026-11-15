@@ -3,6 +3,7 @@ import {
   getFireRateMultiplier,
   getFirepowerMultiplier,
   getGoldMultiplier,
+  getNextStartSquadGain,
   getStartSquadCount,
   getUpgradeCost,
 } from '../game/stages';
@@ -24,7 +25,7 @@ export function UpgradePanel({ gold, upgrades, onUpgrade }: UpgradePanelProps) {
     {
       key: 'startSquad',
       title: 'Start-Squad',
-      stat: `${getStartSquadCount(upgrades)} soldaten (+2)`,
+      stat: `${getStartSquadCount(upgrades)} soldaten (+${getNextStartSquadGain(upgrades.startSquad)})`,
       icon: Users,
     },
     {

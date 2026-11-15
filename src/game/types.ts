@@ -4,7 +4,7 @@ export type BiomeChoice = 'AUTO' | 'COAST' | 'DESERT' | 'REACTOR';
 
 export interface GameplaySettings {
   stageLengthFactor: number; // 1.0 .. 6.0 (step 0.5)
-  gameSpeed: number; // 0.6 .. 1.6 (step 0.05)
+  gameSpeed: number; // 0.6 .. 1.5 (step 0.05)
   enemyHpMult: number; // 0.5 .. 2.5 (step 0.1)
   enemyCountMult: number; // 0.5 .. 2.5 (step 0.1)
   enemyMaxGroupSize: number; // 15 .. 250 (step 5)
@@ -42,7 +42,18 @@ export interface PersistentProgress {
   settingsVersion?: number;
 }
 
-export type GateOp = 'ADD' | 'SUB' | 'MUL' | 'DIV' | 'RATE_UP' | 'DMG_UP' | 'CAP_SET';
+export type GateOp =
+  | 'ADD'
+  | 'SUB'
+  | 'MUL'
+  | 'DIV'
+  | 'RATE_UP'
+  | 'DMG_UP'
+  | 'CAP_SET'
+  | 'SHIELD_ADD'
+  | 'DRONE_ADD'
+  | 'GOLD_RUSH'
+  | 'MYSTERY';
 
 export interface GateEntity {
   id: number;
@@ -68,17 +79,36 @@ export type CrateReward =
   | { type: 'WEAPON'; tier: WeaponTier }
   | { type: 'SHIELD'; charges: number }
   | { type: 'DRONE'; count: number }
+  | { type: 'CRYO'; duration: number }
+  | { type: 'HYPER'; charge: number }
+  | { type: 'TESLA'; damage: number; chains: number }
+  | { type: 'MINE'; radius: number; damage: number }
   | { type: 'TNT'; radius: number; damage: number };
 
 export interface BarrelEntity {
   id: number;
   x: number;
+  baseX?: number;
   z: number;
   radius: number;
   hp: number;
   maxHp: number;
-  kind: 'WOOD' | 'STEEL' | 'WEAPON_CRATE' | 'SQUAD_CRATE' | 'SHIELD_CRATE' | 'DRONE_CRATE' | 'TNT_BARREL';
+  kind:
+    | 'WOOD'
+    | 'STEEL'
+    | 'GOLD_SAFE'
+    | 'WEAPON_CRATE'
+    | 'SQUAD_CRATE'
+    | 'SHIELD_CRATE'
+    | 'DRONE_CRATE'
+    | 'CRYO_CRATE'
+    | 'HYPER_CRATE'
+    | 'TESLA_CRATE'
+    | 'MINE'
+    | 'TNT_BARREL';
   reward: CrateReward;
+  moveAmp?: number;
+  movePhase?: number;
   flashTimer: number;
   destroyed: boolean;
 }
@@ -86,11 +116,14 @@ export interface BarrelEntity {
 export interface BridgeBarrier {
   id: number;
   x: number;
+  baseX?: number;
   width: number;
   z: number;
   hp: number;
   maxHp: number;
   damage: number;
+  moveAmp?: number;
+  movePhase?: number;
   flashTimer: number;
   destroyed: boolean;
 }
@@ -110,8 +143,24 @@ export interface EnemyGroup {
   maxCount: number;
   hpPerUnit: number;
   currentFrontHp: number;
-  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET' | 'BOMBER';
+  kind:
+    | 'RAIDER'
+    | 'BRUTE'
+    | 'RUSHER'
+    | 'TURRET'
+    | 'BOMBER'
+    | 'SNIPER'
+    | 'SPLITTER'
+    | 'SHIELD_UNIT'
+    | 'JUMPER'
+    | 'MEDIC'
+    | 'MORTAR';
   fireTimer: number;
+  actionTimer?: number;
+  shieldHp?: number;
+  maxShieldHp?: number;
+  aimX?: number;
+  aimLocked?: boolean;
   flashTimer: number;
   units: EnemyUnit[];
 }
@@ -126,7 +175,7 @@ export interface BossEntity {
   vx: number;
   hp: number;
   maxHp: number;
-  kind: 'TANK' | 'HELI' | 'MECH';
+  kind: 'TANK' | 'HELI' | 'MECH' | 'CARRIER';
   flashTimer: number;
   goldReward: number;
   attackTimer: number;
@@ -134,15 +183,45 @@ export interface BossEntity {
   telegraphLanes: number[];
   telegraphTimer: number;
   summonedReinforcements?: boolean;
+  droppedEnrageCrate?: boolean;
+  patternStep?: number;
+}
+
+export interface FieldPickup {
+  id: number;
+  x: number;
+  z: number;
+  kind: 'MAGNET' | 'FRENZY' | 'SQUAD' | 'NUKE';
+  value: number;
+  collected: boolean;
+}
+
+export interface MortarStrike {
+  id: number;
+  x: number;
+  z: number;
+  timer: number;
+  maxTimer: number;
+  radius: number;
+  damage: number;
+}
+
+export interface LightningArc {
+  points: Array<{ x: number; y: number }>;
+  life: number;
+  maxLife: number;
+  color: string;
 }
 
 export interface EnemyHazard {
   id: number;
   x: number;
   z: number;
+  vx?: number;
   speed: number;
   damage: number;
   radius: number;
+  kind?: 'ORB' | 'SNIPER' | 'MISSILE' | 'WAVE';
 }
 
 export interface AirstrikeMissile {
@@ -220,6 +299,11 @@ export interface HudSnapshot {
   hyperCharge: number; // 0..100
   hyperActive: boolean;
   airstrikeCharge: number; // 0..100
+  shockwaveCharge: number; // 0..100
+  formation: 'WIDE' | 'FOCUS';
+  magnetActive: boolean;
+  frenzyActive: boolean;
+  cryoActive: boolean;
   comboCount: number;
   biomeName: string;
   stage: number;
@@ -236,6 +320,16 @@ export interface HudSnapshot {
 
 export interface StageWaveEvent {
   atDistance: number;
-  type: 'GATE_SINGLE' | 'GATE_PAIR' | 'GATE_TRIO' | 'BARRELS' | 'BARRIER' | 'ENEMIES' | 'MINIBOSS' | 'BOSS';
+  type:
+    | 'GATE_SINGLE'
+    | 'GATE_PAIR'
+    | 'GATE_TRIO'
+    | 'BARRELS'
+    | 'BARRIER'
+    | 'PICKUPS'
+    | 'ENEMIES'
+    | 'MINIBOSS'
+    | 'BOSS';
   payload: unknown;
+  banner?: string;
 }
