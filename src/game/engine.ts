@@ -116,6 +116,14 @@ export const WEAPON_LABELS: Record<WeaponTier, string> = {
   LASER: 'Plasmakanon',
 };
 
+interface DroneUnit {
+  id: number;
+  slot: number;
+  hp: number;
+  maxHp: number;
+  flashTimer: number;
+}
+
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -138,8 +146,12 @@ export class GameEngine {
   private maxSquadReached = 8;
   private weaponTier: WeaponTier = 'RIFLE';
   private shieldCharges = 0;
-  private droneCount = 0;
+  private drones: DroneUnit[] = [];
   private droneCooldown = 0;
+
+  private get droneCount(): number {
+    return this.drones.length;
+  }
   private hyperCharge = 0;
   private hyperTimer = 0;
   private goldRushTimer = 0;
@@ -244,7 +256,8 @@ export class GameEngine {
     this.maxSquadReached = this.squadCount;
     this.weaponTier = settings.startWeapon;
     this.shieldCharges = settings.startShield;
-    this.droneCount = settings.startDrones;
+    this.drones = [];
+    this.addDrones(settings.startDrones);
     this.droneCooldown = 0;
     this.hyperCharge = 0;
     this.hyperTimer = 0;
@@ -420,6 +433,7 @@ export class GameEngine {
 
     this.updateShooting(dt);
     this.updateDroneShooting(dt);
+    this.updateDrones(dt);
     this.updateMissiles(dt);
     this.updateBullets(dt);
     this.updateGates(dt);
@@ -718,6 +732,56 @@ export class GameEngine {
     }
   }
 
+  private addDrones(amount: number) {
+    const maxDrones = 6;
+    for (let n = 0; n < amount; n++) {
+      if (this.drones.length >= maxDrones) return;
+      let slot = 0;
+      while (slot < maxDrones && this.drones.some((d) => d.slot === slot)) slot++;
+      if (slot >= maxDrones) return;
+      this.drones.push({ id: this.nextEntityId++, slot, hp: 4, maxHp: 4, flashTimer: 0 });
+    }
+  }
+
+  private droneX(slot: number): number {
+    const side = slot % 2 === 0 ? -1 : 1;
+    const tierOffset = Math.floor(slot / 2) * 0.08;
+    return this.playerX + side * (0.24 + tierOffset);
+  }
+
+  private randomDroneX(): number | null {
+    if (this.drones.length === 0) return null;
+    const drone = this.drones[Math.floor(Math.random() * this.drones.length)];
+    return this.droneX(drone.slot);
+  }
+
+  private damageDrone(drone: DroneUnit, dmg: number) {
+    if (drone.hp <= 0) return;
+    drone.hp -= dmg;
+    drone.flashTimer = 0.12;
+    const p = this.project(this.droneX(drone.slot), 0.9);
+    this.spawnParticles(p.x, p.y - 22, '#34D399', 4);
+    if (drone.hp <= 0) {
+      this.drones = this.drones.filter((d) => d.id !== drone.id);
+      this.spawnParticles(p.x, p.y - 22, '#34D399', 18);
+      this.spawnParticles(p.x, p.y - 22, '#FDE047', 8);
+      this.spawnShockwave(p.x, p.y - 22, '#34D399', 70);
+      this.spawnFloatingText(p.x, p.y - 46, 'DRONE NEER!', '#6EE7B7', 1.15);
+      sound.playDroneDown();
+      sound.playExplosion();
+      if (!this.reducedMotion) this.shakeIntensity = Math.min(7, this.shakeIntensity + 3);
+      this.pushHud();
+    } else {
+      sound.playHit();
+    }
+  }
+
+  private updateDrones(dt: number) {
+    for (const d of this.drones) {
+      if (d.flashTimer > 0) d.flashTimer = Math.max(0, d.flashTimer - dt);
+    }
+  }
+
   private updateDroneShooting(dt: number) {
     if (this.droneCount <= 0) return;
     this.droneCooldown -= dt;
@@ -725,10 +789,8 @@ export class GameEngine {
     this.droneCooldown = this.hyperTimer > 0 ? 0.22 : 0.34;
 
     const dmg = 8.5 * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus;
-    for (let i = 0; i < this.droneCount; i++) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const tierOffset = Math.floor(i / 2) * 0.08;
-      const dx = this.playerX + side * (0.24 + tierOffset);
+    for (const drone of this.drones) {
+      const dx = this.droneX(drone.slot);
       this.bullets.push({
         x: dx,
         z: 0.9,
@@ -1006,16 +1068,19 @@ export class GameEngine {
         this.shieldCharges = Math.min(5, this.shieldCharges + barrel.reward.charges);
         this.spawnFloatingText(proj.x, proj.y - 20, 'ENERGIESCHILD ACTIEF!', '#22D3EE', 1.2);
       } else if (barrel.reward.type === 'DRONE') {
-        this.droneCount = Math.min(6, this.droneCount + barrel.reward.count);
+        this.addDrones(barrel.reward.count);
         this.spawnFloatingText(proj.x, proj.y - 20, '+1 AANVALSDRONE!', '#34D399', 1.2);
       } else if (barrel.reward.type === 'CRYO') {
         this.cryoTimer = Math.max(this.cryoTimer, barrel.reward.duration);
+        sound.playCryoFreeze();
         this.spawnShockwave(proj.x, proj.y, '#22D3EE', 95);
         this.spawnFloatingText(proj.x, proj.y - 22, 'CRYO! Vijanden traag', '#67E8F9', 1.2);
       } else if (barrel.reward.type === 'HYPER') {
         this.addHyperCharge(barrel.reward.charge);
+        sound.playHyperCrate();
         this.spawnFloatingText(proj.x, proj.y - 20, `+${barrel.reward.charge}% HYPERVUUR`, '#FDE047', 1.2);
       } else if (barrel.reward.type === 'TESLA') {
+        sound.playTeslaZap();
         this.triggerTeslaBlast(barrel, barrel.reward.damage, barrel.reward.chains);
         this.spawnFloatingText(proj.x, proj.y - 22, 'TESLA-KETEN!', '#C084FC', 1.25);
       } else if (barrel.reward.type === 'TNT') {
@@ -1300,12 +1365,13 @@ export class GameEngine {
       label = `+${amount} Schild`;
     } else if (g.op === 'DRONE_ADD') {
       const amount = Math.max(1, Math.round(g.value));
-      this.droneCount = Math.min(6, this.droneCount + amount);
+      this.addDrones(amount);
       label = `+${amount} Drone`;
     } else if (g.op === 'GOLD_RUSH') {
       this.goldRushTimer = Math.max(this.goldRushTimer, 12);
       label = `+${g.value}% Goud (12s)`;
     } else if (g.op === 'MYSTERY') {
+      sound.playMysteryGate();
       const roll = Math.random();
       if (roll < 0.3) {
         const bonus = 10 + this.stage * 2;
@@ -1315,7 +1381,7 @@ export class GameEngine {
         this.shieldCharges = Math.min(5, this.shieldCharges + 1);
         label = '+1 Schild!';
       } else if (roll < 0.72) {
-        this.droneCount = Math.min(6, this.droneCount + 1);
+        this.addDrones(1);
         label = '+1 Drone!';
       } else if (roll < 0.88) {
         this.addHyperCharge(40);
@@ -1423,11 +1489,12 @@ export class GameEngine {
         if (g.fireTimer <= 0 && g.z < 0.78) {
           g.fireTimer = Math.max(0.95, 1.45 - this.stage * 0.07);
           const dmg = Math.max(1, Math.round((2 + Math.floor(this.stage * 0.5)) * this.difficultyDmgMult));
+          const targetX = Math.random() < 0.35 ? (this.randomDroneX() ?? g.x) : g.x;
           if (this.stage >= 3) {
             for (const dx of [-0.09, 0.09]) {
               this.hazards.push({
                 id: this.nextEntityId++,
-                x: Math.max(-0.78, Math.min(0.78, g.x + dx)),
+                x: Math.max(-0.78, Math.min(0.78, targetX + dx)),
                 z: g.z + 0.03,
                 speed: 0.48,
                 damage: dmg,
@@ -1437,7 +1504,7 @@ export class GameEngine {
           } else {
             this.hazards.push({
               id: this.nextEntityId++,
-              x: g.x,
+              x: targetX,
               z: g.z + 0.03,
               speed: 0.48,
               damage: dmg,
@@ -1452,7 +1519,7 @@ export class GameEngine {
             g.fireTimer = Math.max(1.45, 2.25 - this.stage * 0.06);
             this.hazards.push({
               id: this.nextEntityId++,
-              x: g.x,
+              x: Math.random() < 0.3 ? (this.randomDroneX() ?? g.x) : g.x,
               z: g.z + 0.03,
               speed: 0.45,
               damage: Math.max(1, Math.round((1 + Math.floor(this.stage * 0.4)) * this.difficultyDmgMult)),
@@ -1481,12 +1548,13 @@ export class GameEngine {
           g.fireTimer = Math.max(1.7, 2.9 - this.stage * 0.08);
           this.hazards.push({
             id: this.nextEntityId++,
-            x: g.x,
+            x: Math.random() < 0.65 ? (this.randomDroneX() ?? g.x) : g.x,
             z: g.z + 0.03,
             speed: 0.82,
             damage: Math.max(2, Math.round((2 + Math.floor(this.stage * 0.6)) * this.difficultyDmgMult)),
             radius: 0.08,
           });
+          sound.playSniperShot();
         }
       } else if (g.kind === 'SPLITTER') {
         g.x += Math.sin(this.elapsedTime * 3.6 + g.id) * 0.24 * dt;
@@ -1522,6 +1590,10 @@ export class GameEngine {
           g.flashTimer = 0.12;
         }
         this.absorbOrDamageSquad(loss, g.kind === 'BOMBER' ? `-${loss} Bomber-Knall!` : `-${loss} Tegenaanval`, true);
+        if (Math.random() < 0.3) {
+          const drone = this.drones.find((d) => Math.abs(this.droneX(d.slot) - g.x) < 0.35);
+          if (drone) this.damageDrone(drone, 1);
+        }
         continue;
       }
 
@@ -1627,6 +1699,10 @@ export class GameEngine {
           } else {
             boss.telegraphLanes = [primary];
           }
+          const droneLane = Math.random() < 0.5 ? this.randomDroneX() : null;
+          if (droneLane !== null && boss.telegraphLanes.length < 3) {
+            boss.telegraphLanes.push(droneLane);
+          }
           boss.telegraphTimer = enraged ? 0.62 : 0.72;
         }
       }
@@ -1642,6 +1718,16 @@ export class GameEngine {
         this.hazards.splice(i, 1);
         this.absorbOrDamageSquad(h.damage, `-${h.damage} Treffer`, true);
         continue;
+      }
+      if (h.z >= 0.8 && h.z <= 0.99) {
+        const drone = this.drones.find(
+          (d) => Math.abs(h.x - this.droneX(d.slot)) < h.radius + 0.11,
+        );
+        if (drone) {
+          this.hazards.splice(i, 1);
+          this.damageDrone(drone, h.damage);
+          continue;
+        }
       }
       if (h.z > 1.08) {
         this.hazards.splice(i, 1);
@@ -2544,24 +2630,35 @@ export class GameEngine {
       }
     }
 
-    for (let d = 0; d < this.droneCount; d++) {
-      const side = d % 2 === 0 ? -1 : 1;
-      const tierOffset = Math.floor(d / 2) * 0.08;
-      const hover = Math.sin(this.elapsedTime * 6 + d) * 4;
-      const dp = this.project(this.playerX + side * (0.24 + tierOffset), 0.9);
+    for (const drone of this.drones) {
+      const hover = Math.sin(this.elapsedTime * 6 + drone.slot) * 4;
+      const dp = this.project(this.droneX(drone.slot), 0.9);
+      const dy = dp.y - 22 + hover;
+      const flash = drone.flashTimer > 0;
 
-      ctx.fillStyle = '#0F172A';
+      ctx.fillStyle = flash ? '#FFFFFF' : '#0F172A';
       ctx.beginPath();
-      ctx.arc(dp.x, dp.y - 22 + hover, 9, 0, Math.PI * 2);
+      ctx.arc(dp.x, dy, 9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#34D399';
+      ctx.strokeStyle = flash ? '#FFFFFF' : drone.hp <= 1 ? '#F87171' : '#34D399';
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      ctx.fillStyle = '#6EE7B7';
+      ctx.fillStyle = flash ? '#FFFFFF' : '#6EE7B7';
       ctx.beginPath();
-      ctx.arc(dp.x, dp.y - 22 + hover, 3.5, 0, Math.PI * 2);
+      ctx.arc(dp.x, dy, 3.5, 0, Math.PI * 2);
       ctx.fill();
+
+      if (drone.hp < drone.maxHp) {
+        const barW = 20;
+        const barH = 3;
+        const barX = dp.x - barW / 2;
+        const barY = dy - 16;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = drone.hp <= 1 ? '#F87171' : '#34D399';
+        ctx.fillRect(barX, barY, barW * (drone.hp / drone.maxHp), barH);
+      }
     }
 
     if (this.shieldCharges > 0) {

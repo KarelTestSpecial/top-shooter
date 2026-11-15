@@ -10,7 +10,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Tonnen, Kratten & TNT**:
   - **TNT-vaten**: Ontploffen in een grote kettingreactie en schakelen omliggende vijanden en tonnen uit.
   - **Wapenkisten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun, Raketwerper en doorborend Plasmakanon.
-  - **Schild- & Dronekratten**: Voeg beschermende energieschilden en flankerende aanvalsdrones toe.
+  - **Schild- & Dronekratten**: Voeg beschermende energieschilden en flankerende aanvalsdrones toe. Drones zijn kwetsbaar: vijandelijk vuur kan ze raken en vernietigen.
   - **Cryo-, Hyper- & Tesla-kratten**: Vertraag alle vijanden, laad je hypervuur op of ontketen een bliksemketting.
   - **Goudkluizen**: Grote goudbeloningen voor wie de tijd neemt om ze open te breken.
 - **Nieuwe vijanden**: sluipschutters met lang bereik en splitters die bij hun dood in twee groepen uiteenvallen.
