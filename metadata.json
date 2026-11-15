@@ -2,5 +2,5 @@
   "name": "PoortRush",
   "description": "Snelle arcade lane-shooter met vermenigvuldigingspoortjes, breekbare tonnen en directe squad-upgrades zonder wachttijden.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

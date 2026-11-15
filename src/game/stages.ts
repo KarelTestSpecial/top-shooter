@@ -15,12 +15,12 @@ export const ABSOLUTE_MAX_CAP = 1250;
  * Deze factor zet de basisgolven omhoog; settings.enemyCountMult blijft
  * daar bovenop werken zodat de speler zelf kan bijstellen.
  */
-const ENEMY_PRESSURE_FACTOR = 1.3;
+const ENEMY_PRESSURE_FACTOR = 1.15;
 
 export const STAGE_LENGTH_PRESETS: Array<{ factor: number; label: string; shortLabel: string }> = [
   { factor: 1, label: 'Standaard', shortLabel: '1×' },
   { factor: 2, label: 'Lang', shortLabel: '2×' },
-  { factor: 3.5, label: 'Marathon', shortLabel: '3,5×' },
+  { factor: 3, label: 'Marathon', shortLabel: '3×' },
   { factor: 6, label: 'Ultra', shortLabel: '6×' },
 ];
 
@@ -34,27 +34,27 @@ export function getStageLengthMetrics(factor: number) {
 }
 
 export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
-  stageLengthFactor: 1,
-  gameSpeed: 1.0,
+  stageLengthFactor: 3,
+  gameSpeed: 0.9,
   enemyHpMult: 1.3,
-  enemyCountMult: 1.35,
-  enemyMaxGroupSize: 140,
+  enemyCountMult: 1.15,
+  enemyMaxGroupSize: 120,
   goldMult: 1.0,
   startWeapon: 'RIFLE',
   startShield: 0,
   startDrones: 0,
   biomeChoice: 'AUTO',
-  maxSquadCap: 300,
+  maxSquadCap: 220,
   purpleGateFreq: 15,
   purpleDoubleChance: 15,
-  purpleGateMin: 75,
-  purpleGateMax: 300,
+  purpleGateMin: 60,
+  purpleGateMax: 220,
   miniBossMult: 1.4,
   bossMult: 1.5,
 };
 
 export function getStartSquadCount(upgrades: UpgradeLevels): number {
-  return 6 + upgrades.startSquad * 2;
+  return 10 + upgrades.startSquad * 2;
 }
 
 export function getNextStartSquadGain(_level: number): number {
@@ -62,11 +62,11 @@ export function getNextStartSquadGain(_level: number): number {
 }
 
 export function getFirepowerMultiplier(upgrades: UpgradeLevels): number {
-  return 1 + upgrades.firepower * 0.18;
+  return 1 + upgrades.firepower * 0.12;
 }
 
 export function getFireRateMultiplier(upgrades: UpgradeLevels): number {
-  return 1 + upgrades.fireRate * 0.12;
+  return 1 + upgrades.fireRate * 0.08;
 }
 
 export function getGoldMultiplier(upgrades: UpgradeLevels): number {
@@ -76,7 +76,7 @@ export function getGoldMultiplier(upgrades: UpgradeLevels): number {
 export function getUpgradeCost(key: keyof UpgradeLevels, level: number): number {
   const base =
     key === 'startSquad' ? 40 : key === 'firepower' ? 50 : key === 'fireRate' ? 45 : 55;
-  return Math.round(base * Math.pow(1.42, level));
+  return Math.round(base * Math.pow(1.5, level));
 }
 
 export interface GateSpec {
@@ -90,7 +90,18 @@ export interface GateSpec {
 export interface BarrelSpec {
   x: number;
   hp: number;
-  kind: 'WOOD' | 'STEEL' | 'WEAPON_CRATE' | 'SQUAD_CRATE' | 'SHIELD_CRATE' | 'DRONE_CRATE' | 'TNT_BARREL';
+  kind:
+    | 'WOOD'
+    | 'STEEL'
+    | 'GOLD_SAFE'
+    | 'WEAPON_CRATE'
+    | 'SQUAD_CRATE'
+    | 'SHIELD_CRATE'
+    | 'DRONE_CRATE'
+    | 'CRYO_CRATE'
+    | 'HYPER_CRATE'
+    | 'TESLA_CRATE'
+    | 'TNT_BARREL';
   weaponTier?: WeaponTier;
   squadBonus?: number;
   goldAmount?: number;
@@ -107,7 +118,7 @@ export interface EnemySpec {
   x: number;
   count: number;
   hpPerUnit: number;
-  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET' | 'BOMBER';
+  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET' | 'BOMBER' | 'SNIPER' | 'SPLITTER';
   speed?: number;
 }
 
@@ -158,7 +169,7 @@ function computeEnemyCount(
   isEliteHeavy = false,
 ): number {
   const progress = totalUnits > 0 ? Math.max(0, Math.min(1, atDistance / totalUnits)) : 0;
-  const levelScale = Math.pow(1.26, Math.min(stage - 1, 14));
+  const levelScale = Math.pow(1.18, Math.min(stage - 1, 14));
   const roadScale = 0.45 + 0.95 * progress;
 
   const roll = pseudoRand(stage * 167 + seedIndex * 53 + Math.round(atDistance) * 11);
@@ -319,7 +330,7 @@ function appendMiddleBlock(
       atDistance: offset + 35,
       type: 'GATE_TRIO',
       payload: {
-        left: { op: 'RATE_UP', value: 22, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
+        left: { op: 'SHIELD_ADD', value: 1, shootable: false, shotsPerStep: 10 } satisfies GateSpec,
         center: { op: 'ADD', value: 8 + stage * 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.65 } satisfies GateSpec,
         right: { op: 'ADD', value: -10, shootable: true, shotsPerStep: Math.max(4, Math.round(4.5 * s * 0.5)), moveAmp: slideAmp * 0.4 } satisfies GateSpec,
       },
@@ -356,9 +367,9 @@ function appendMiddleBlock(
       atDistance: offset + 60,
       type: 'BARRELS',
       payload: [
-        { x: -0.55, hp: Math.round(58 * s), kind: 'WOOD', goldAmount: 30 },
+        { x: -0.55, hp: Math.round(58 * s), kind: 'GOLD_SAFE' },
         { x: 0.0, hp: Math.round(62 * s), kind: 'DRONE_CRATE' },
-        { x: 0.55, hp: Math.round(68 * s), kind: 'STEEL', goldAmount: 42 },
+        { x: 0.55, hp: Math.round(68 * s), kind: 'CRYO_CRATE' },
       ] satisfies BarrelSpec[],
     });
 
@@ -389,7 +400,7 @@ function appendMiddleBlock(
       type: 'GATE_PAIR',
       payload: {
         left: { op: 'ADD', value: -9, shootable: true, shotsPerStep: Math.max(4, Math.round(4.2 * s * 0.55)), moveAmp: slideAmp * 0.4 } satisfies GateSpec,
-        right: { op: 'ADD', value: 7 + stage * 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.5 } satisfies GateSpec,
+        right: { op: 'DRONE_ADD', value: 1, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.5 } satisfies GateSpec,
       },
     });
 
@@ -414,8 +425,8 @@ function appendMiddleBlock(
           x: 0.5,
           count: computeEnemyCount(2, offset + 16, totalUnits, stage, blockIndex * 10 + 7, 'ELITE', settings, true),
           hpPerUnit: Math.round(24 * s),
-          kind: 'TURRET',
-          speed: 0.16,
+          kind: 'SNIPER',
+          speed: 0.12,
         },
       ] satisfies EnemySpec[],
     });
@@ -553,9 +564,9 @@ function appendMiddleBlock(
       atDistance: offset + 48,
       type: 'BARRELS',
       payload: [
-        { x: -0.54, hp: Math.round(62 * s), kind: 'STEEL', goldAmount: 42 },
+        { x: -0.54, hp: Math.round(62 * s), kind: 'GOLD_SAFE' },
         { x: 0.0, hp: Math.round(66 * s), kind: 'WEAPON_CRATE', weaponTier: crateWeapon },
-        { x: 0.54, hp: Math.round(58 * s), kind: 'WOOD', goldAmount: 32 },
+        { x: 0.54, hp: Math.round(58 * s), kind: 'HYPER_CRATE' },
       ] satisfies BarrelSpec[],
     });
 
@@ -579,9 +590,9 @@ function appendMiddleBlock(
         {
           x: 0.48,
           count: computeEnemyCount(2, offset + 59, totalUnits, stage, blockIndex * 10 + 13, 'ELITE', settings, true),
-          hpPerUnit: Math.round(24 * s),
-          kind: 'TURRET',
-          speed: 0.16,
+          hpPerUnit: Math.round(18 * s),
+          kind: 'SPLITTER',
+          speed: 0.3,
         },
       ] satisfies EnemySpec[],
     });
@@ -592,7 +603,7 @@ function appendMiddleBlock(
       atDistance: offset + 76,
       type: 'GATE_PAIR',
       payload: {
-        left: { op: 'ADD', value: 11 + stage * 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.45 } satisfies GateSpec,
+        left: { op: 'GOLD_RUSH', value: 50, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.45 } satisfies GateSpec,
         right: { op: 'DMG_UP', value: 28, shootable: false, shotsPerStep: 12 } satisfies GateSpec,
       },
     });
@@ -625,7 +636,7 @@ function appendMiddleBlock(
       payload: [
         { x: -0.58, hp: Math.round(56 * s), kind: 'WOOD', goldAmount: 32 },
         { x: -0.2, hp: Math.round(56 * s), kind: 'SQUAD_CRATE', squadBonus: 8 + stage * 2 },
-        { x: 0.2, hp: Math.round(64 * s), kind: 'STEEL', goldAmount: 46 },
+        { x: 0.2, hp: Math.round(64 * s), kind: 'TESLA_CRATE' },
         { x: 0.58, hp: Math.round(56 * s), kind: 'DRONE_CRATE' },
       ] satisfies BarrelSpec[],
     });
@@ -687,7 +698,7 @@ function appendMiddleBlock(
       atDistance: offset + 76,
       type: 'GATE_PAIR',
       payload: {
-        left: { op: 'MUL', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.5 } satisfies GateSpec,
+        left: { op: 'MUL', value: 1.5, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.5 } satisfies GateSpec,
         right: { op: 'DIV', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.65 } satisfies GateSpec,
       },
     });
@@ -703,8 +714,8 @@ function appendMiddleBlock(
       kind: miniKind,
       name: `Sector-Commandant ${stage}.${blockIndex + 1}`,
       hp: Math.round(
-        780 *
-          Math.pow(1.52, stage - 1) *
+        560 *
+          Math.pow(1.3, stage - 1) *
           (1 + blockIndex * 0.25) *
           settings.enemyHpMult *
           settings.miniBossMult,
@@ -717,7 +728,7 @@ function appendMiddleBlock(
 export function generateStageEvents(stage: number, settings: GameplaySettings): StageWaveEvent[] {
   const lenCfg = getStageLengthMetrics(settings.stageLengthFactor);
 
-  const baseScale = Math.pow(1.36, stage - 1);
+  const baseScale = Math.pow(1.24, stage - 1);
   const hpScale = baseScale * settings.enemyHpMult;
   const barrierDmg = Math.max(2, Math.round((6 + stage * 1.1) * Math.sqrt(settings.enemyHpMult)));
 
@@ -731,10 +742,10 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     atDistance: 4,
     type: 'GATE_PAIR',
     payload: {
-      left: { op: 'ADD', value: 4 + stage, shootable: false, shotsPerStep: 6 } satisfies GateSpec,
+      left: { op: 'MYSTERY', value: 0, shootable: false, shotsPerStep: 6 } satisfies GateSpec,
       right: {
         op: 'ADD',
-        value: -4,
+        value: -2,
         shootable: true,
         shotsPerStep: Math.max(3, Math.round(4.5 * hpScale * 0.6)),
       } satisfies GateSpec,
@@ -745,7 +756,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     atDistance: 12,
     type: 'BARRELS',
     payload: [
-      { x: -0.54, hp: Math.round(18 * hpScale), kind: 'WOOD', goldAmount: 18 },
+      { x: -0.54, hp: Math.round(18 * hpScale), kind: 'GOLD_SAFE' },
       { x: 0.0, hp: Math.round(28 * hpScale), kind: 'WEAPON_CRATE', weaponTier: 'DOUBLE' },
       { x: 0.54, hp: Math.round(22 * hpScale), kind: 'SHIELD_CRATE' },
     ] satisfies BarrelSpec[],
@@ -759,13 +770,13 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
         ? [
             {
               x: -0.45,
-              count: computeEnemyCount(8, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
+              count: computeEnemyCount(6, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
               hpPerUnit: Math.round(5.4 * hpScale),
               kind: 'RAIDER',
             },
             {
               x: 0.45,
-              count: computeEnemyCount(10, 21, lenCfg.units, stage, 2, 'STANDARD', settings),
+              count: computeEnemyCount(8, 21, lenCfg.units, stage, 2, 'STANDARD', settings),
               hpPerUnit: Math.round(5.4 * hpScale),
               kind: 'RAIDER',
             },
@@ -774,14 +785,14 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
           ? [
               {
                 x: -0.25,
-                count: computeEnemyCount(13, 21, lenCfg.units, stage, 1, 'STANDARD', settings),
+                count: computeEnemyCount(9, 21, lenCfg.units, stage, 1, 'STANDARD', settings),
                 hpPerUnit: Math.round(4.6 * hpScale),
                 kind: 'RUSHER',
                 speed: 0.42,
               },
               {
                 x: 0.42,
-                count: computeEnemyCount(4, 21, lenCfg.units, stage, 2, 'SCOUT', settings),
+                count: computeEnemyCount(3, 21, lenCfg.units, stage, 2, 'SCOUT', settings),
                 hpPerUnit: Math.round(6.2 * hpScale),
                 kind: 'BOMBER',
                 speed: 0.36,
@@ -790,7 +801,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
           : [
               {
                 x: -0.46,
-                count: computeEnemyCount(7, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
+                count: computeEnemyCount(5, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
                 hpPerUnit: Math.round(5.4 * hpScale),
                 kind: 'RAIDER',
               },
@@ -803,7 +814,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
             ],
   });
   events.push({
-    atDistance: 22,
+    atDistance: 56,
     type: 'BARRELS',
     payload: [{ x: variant === 1 ? -0.45 : 0.0, hp: Math.round(16 * hpScale), kind: 'TNT_BARREL' }] satisfies BarrelSpec[],
   });
@@ -811,7 +822,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   maybeAppendPurpleGate(events, 29, lenCfg.units, stage, slotCounter, slideAmp, settings);
 
   events.push({
-    atDistance: 33,
+    atDistance: 63,
     type: 'BARRIER',
     payload: [
       {
@@ -841,7 +852,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     type: 'GATE_TRIO',
     payload: {
       left: { op: 'ADD', value: Math.round(7 + stage * 2), shootable: false, shotsPerStep: 8 } satisfies GateSpec,
-      center: { op: 'MUL', value: 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.55 } satisfies GateSpec,
+      center: { op: 'MUL', value: 1.5, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.55 } satisfies GateSpec,
       right: {
         op: 'ADD',
         value: -8,
@@ -873,8 +884,8 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
         x: variant === 2 ? -0.5 : 0.5,
         count: computeEnemyCount(2, 53, lenCfg.units, stage, 4, 'ELITE', settings, true),
         hpPerUnit: Math.round(23 * hpScale),
-        kind: 'TURRET',
-        speed: 0.17,
+        kind: 'SNIPER',
+        speed: 0.12,
       },
     ] satisfies EnemySpec[],
   });
@@ -903,9 +914,9 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       },
       {
         x: -0.52,
-        count: computeEnemyCount(3, 73, lenCfg.units, stage, 6, 'ELITE', settings, true),
-        hpPerUnit: Math.round(19 * hpScale),
-        kind: 'BRUTE',
+        count: computeEnemyCount(4, 73, lenCfg.units, stage, 6, 'ELITE', settings, true),
+        hpPerUnit: Math.round(14 * hpScale),
+        kind: 'SPLITTER',
       },
       {
         x: 0.52,
@@ -943,7 +954,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     payload: {
       kind: miniBossKind,
       name: `Voorhoede-Kapitein ${stage}`,
-      hp: Math.round(700 * Math.pow(1.52, stage - 1) * settings.enemyHpMult * settings.miniBossMult),
+      hp: Math.round(500 * Math.pow(1.3, stage - 1) * settings.enemyHpMult * settings.miniBossMult),
       goldReward: Math.round((65 + stage * 28) * settings.goldMult * miniGoldBonus),
     },
   });
@@ -996,7 +1007,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     atDistance: finalOffset + 32,
     type: 'BARRELS',
     payload: [
-      { x: -0.58, hp: Math.round(62 * finalScale), kind: 'WOOD', goldAmount: 28 },
+      { x: -0.58, hp: Math.round(62 * finalScale), kind: 'GOLD_SAFE' },
       { x: -0.2, hp: Math.round(28 * finalScale), kind: 'TNT_BARREL' },
       { x: 0.2, hp: Math.round(68 * finalScale), kind: 'STEEL', goldAmount: 42 },
       { x: 0.58, hp: Math.round(62 * finalScale), kind: 'WOOD', goldAmount: 28 },
@@ -1014,7 +1025,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
         shotsPerStep: Math.max(4, Math.round(4.8 * finalScale * 0.5)),
         moveAmp: slideAmp * 0.4,
       } satisfies GateSpec,
-      right: { op: 'MUL', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp } satisfies GateSpec,
+      right: { op: 'MUL', value: 1.5, shootable: false, shotsPerStep: 12, moveAmp: slideAmp } satisfies GateSpec,
     },
   });
 
@@ -1135,7 +1146,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       name: bossNames[bossKind],
       hp: Math.round(
         1400 *
-          Math.pow(1.6, stage - 1) *
+          Math.pow(1.32, stage - 1) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *
           settings.bossMult,

@@ -25,7 +25,7 @@ const STORAGE_KEY = 'poortrush_progress_v1';
 const DEFAULT_PROGRESS: PersistentProgress = {
   gold: 0,
   highestStage: 1,
-  bestSquad: 6,
+  bestSquad: 10,
   totalKills: 0,
   upgrades: {
     startSquad: 0,
@@ -35,7 +35,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
-  settingsVersion: 7,
+  settingsVersion: 8,
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -200,10 +200,21 @@ function loadProgress(): PersistentProgress {
       if (purpleDoubleChance === 55) purpleDoubleChance = DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance;
     }
 
+    // v8: rustiger basis-tempo, lange stages en een vlakkere power-curve.
+    if ((parsed.settingsVersion ?? 1) < 8) {
+      if (gameSpeed === 1.0 || gameSpeed === 1.1) gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+      if (stageLengthFactor === 1) stageLengthFactor = DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor;
+      if (maxSquadCap === 300) maxSquadCap = DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap;
+      if (purpleGateMin === 75) purpleGateMin = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin;
+      if (purpleGateMax === 300) purpleGateMax = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMax;
+      if (enemyCountMult === 1.35) enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
+      if (enemyMaxGroupSize === 140) enemyMaxGroupSize = DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize;
+    }
+
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : 0,
       highestStage: typeof parsed.highestStage === 'number' ? Math.max(1, parsed.highestStage) : 1,
-      bestSquad: typeof parsed.bestSquad === 'number' ? Math.max(6, parsed.bestSquad) : 6,
+      bestSquad: typeof parsed.bestSquad === 'number' ? Math.max(10, parsed.bestSquad) : 10,
       totalKills: typeof parsed.totalKills === 'number' ? parsed.totalKills : 0,
       upgrades: {
         startSquad: parsed.upgrades?.startSquad ?? 0,
@@ -231,7 +242,7 @@ function loadProgress(): PersistentProgress {
         miniBossMult,
         bossMult,
       },
-      settingsVersion: 7,
+      settingsVersion: 8,
     };
   } catch {
     return DEFAULT_PROGRESS;
