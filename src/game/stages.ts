@@ -57,6 +57,10 @@ export function getStartSquadCount(upgrades: UpgradeLevels): number {
   return 6 + upgrades.startSquad * 2;
 }
 
+export function getNextStartSquadGain(_level: number): number {
+  return 2;
+}
+
 export function getFirepowerMultiplier(upgrades: UpgradeLevels): number {
   return 1 + upgrades.firepower * 0.18;
 }
@@ -1119,6 +1123,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     TANK: `Pantsertank Mk.${stage}`,
     HELI: `Storm-Gunship V${stage}`,
     MECH: `IJzeren Kolos ${stage}`,
+    CARRIER: `Vliegdekschip ${stage}`,
   };
 
   const bossGoldBonus = settings.bossMult > 1 ? 1 + (settings.bossMult - 1) * 0.35 : 1;
