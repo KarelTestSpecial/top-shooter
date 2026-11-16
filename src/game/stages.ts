@@ -107,6 +107,98 @@ export function getUpgradeCost(key: keyof UpgradeLevels, level: number): number 
   return Math.round(base * Math.pow(1.5, level));
 }
 
+export const UPGRADE_KEYS: Array<keyof UpgradeLevels> = [
+  'startSquad',
+  'firepower',
+  'fireRate',
+  'goldBonus',
+];
+
+/** Bovenliggende veiligheidsgrens voor upgrade-levels (zie coerceSlotProgress). */
+export const MAX_UPGRADE_LEVEL = 1000;
+
+/** Relatieve verdeelsleutel van de "Verdeel goud"-knop; gelijk = 25/25/25/25. */
+export const DEFAULT_UPGRADE_WEIGHTS: UpgradeLevels = {
+  startSquad: 25,
+  firepower: 25,
+  fireRate: 25,
+  goldBonus: 25,
+};
+
+/** Ruwe gewichten omgezet naar percentages die samen 100 vormen. */
+export function getUpgradeWeightPercents(weights: UpgradeLevels): UpgradeLevels {
+  const total = UPGRADE_KEYS.reduce((sum, key) => sum + Math.max(0, weights[key] ?? 0), 0);
+  if (total <= 0) return { ...DEFAULT_UPGRADE_WEIGHTS };
+  return {
+    startSquad: (Math.max(0, weights.startSquad) / total) * 100,
+    firepower: (Math.max(0, weights.firepower) / total) * 100,
+    fireRate: (Math.max(0, weights.fireRate) / total) * 100,
+    goldBonus: (Math.max(0, weights.goldBonus) / total) * 100,
+  };
+}
+
+export interface GoldSplitResult {
+  /** Goud dat overblijft nadat er niets meer koopbaar is. */
+  gold: number;
+  upgrades: UpgradeLevels;
+  /** Aantal gekochte levels per categorie. */
+  gained: UpgradeLevels;
+  spent: number;
+}
+
+/**
+ * Verdeelt het beschikbare goud over de vier upgrade-categorieën volgens de
+ * sleutel. Per categorie wordt eerst het eigen budget besteed (goedkoopste
+ * level eerst); wat daarna overblijft gaat naar de goedkoopste beschikbare
+ * upgrade, zodat er geen goud ongebruikt blijft liggen.
+ */
+export function splitGold(
+  gold: number,
+  upgrades: UpgradeLevels,
+  weights: UpgradeLevels,
+): GoldSplitResult {
+  const percents = getUpgradeWeightPercents(weights);
+  const next: UpgradeLevels = { ...upgrades };
+  const gained: UpgradeLevels = { startSquad: 0, firepower: 0, fireRate: 0, goldBonus: 0 };
+  const available = Math.max(0, Math.floor(gold));
+  let remaining = available;
+
+  for (const key of UPGRADE_KEYS) {
+    let budget = Math.floor((available * percents[key]) / 100);
+    while (budget > 0 && remaining > 0 && next[key] < MAX_UPGRADE_LEVEL) {
+      const cost = getUpgradeCost(key, next[key]);
+      if (!Number.isFinite(cost) || cost > budget || cost > remaining) break;
+      next[key] += 1;
+      gained[key] += 1;
+      budget -= cost;
+      remaining -= cost;
+    }
+  }
+
+  for (;;) {
+    if (UPGRADE_KEYS.every((key) => next[key] >= MAX_UPGRADE_LEVEL)) break;
+    let bestKey: keyof UpgradeLevels | null = null;
+    let bestCost = Number.POSITIVE_INFINITY;
+    for (const key of UPGRADE_KEYS) {
+      const cost = getUpgradeCost(key, next[key]);
+      if (next[key] >= MAX_UPGRADE_LEVEL || !Number.isFinite(cost) || cost > remaining) continue;
+      if (
+        cost < bestCost ||
+        (cost === bestCost && bestKey !== null && percents[key] > percents[bestKey])
+      ) {
+        bestKey = key;
+        bestCost = cost;
+      }
+    }
+    if (bestKey === null) break;
+    next[bestKey] += 1;
+    gained[bestKey] += 1;
+    remaining -= bestCost;
+  }
+
+  return { gold: remaining, upgrades: next, gained, spent: available - remaining };
+}
+
 export interface GateSpec {
   op: GateOp;
   value: number;

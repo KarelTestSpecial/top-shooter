@@ -2,7 +2,7 @@
 
 Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-**Versie 1.2.1** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
+**Versie 1.2.2** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
 
 ## Functies
 
@@ -25,7 +25,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Vijanden**: rushers, raiders, turrets, brutes en bommers, plus sluipschutters met lang bereik en splitters die bij hun dood in twee groepen uiteenvallen.
 - **Combo-Streak & Hypervuur**: Snelle eliminaties bouwen je Combo op voor hogere kritieke trefferkans en laden Hypervuur op (`2×` goud en extra vuursnelheid).
 - **Afwisselende Biomes & Eindbazen**: Wisselt tussen *Kustbrug*, *Woestijnkloof* en *Nacht-Reactor*, elk afgesloten door een eindbaas (tank, heli, mech of carrier) met een Woede-Fase onder 55% HP.
-- **Directe Upgrades**: Besteed goud tussen rondes direct aan **Start-Squad**, **Vuurkracht**, **Vuursnelheid** en **Goudbonus**.
+- **Directe Upgrades**: Besteed goud tussen rondes direct aan **Start-Squad**, **Vuurkracht**, **Vuursnelheid** en **Goudbonus**, of laat de **Verdeel goud**-knop het hele bedrag in één keer over de vier categorieën spreiden. De standaardverdeling is gelijk (25/25/25/25); met de **verdeelsleutel** stel je zelf de relatieve gewichten in (bv. 50/20/20/10). Wat per categorie niet koopbaar is, schuift door naar de goedkoopste beschikbare upgrade.
 - **3 Opslag-slots & Clean Slate**: Sla je volledige spelersstatus (goud, upgrades, record, hoogste stage, kills en instellingen) op in één van de 3 slots, laad een status later terug, of begin met een **clean slate** (de slots blijven bewaard).
 
 ## Balans

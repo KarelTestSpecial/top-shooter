@@ -8,10 +8,13 @@ import { sound } from './game/sound';
 import {
   ABSOLUTE_MAX_CAP,
   DEFAULT_GAMEPLAY_SETTINGS,
+  DEFAULT_UPGRADE_WEIGHTS,
+  MAX_UPGRADE_LEVEL,
   STAGE_LENGTH_PRESETS,
   getStageLengthMetrics,
   getStartSquadCount,
   getUpgradeCost,
+  splitGold,
 } from './game/stages';
 import {
   GameState,
@@ -37,6 +40,7 @@ const DEFAULT_PROGRESS: PersistentProgress = {
     fireRate: 0,
     goldBonus: 0,
   },
+  upgradeSplit: { ...DEFAULT_UPGRADE_WEIGHTS },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
   settingsVersion: 8,
@@ -45,6 +49,15 @@ const DEFAULT_PROGRESS: PersistentProgress = {
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
   if (typeof val !== 'number' || Number.isNaN(val)) return fallback;
   return Math.max(min, Math.min(max, val));
+}
+
+function coerceUpgradeSplit(raw: Partial<UpgradeLevels> | undefined): UpgradeLevels {
+  return {
+    startSquad: clampNum(raw?.startSquad, 0, 100, DEFAULT_UPGRADE_WEIGHTS.startSquad),
+    firepower: clampNum(raw?.firepower, 0, 100, DEFAULT_UPGRADE_WEIGHTS.firepower),
+    fireRate: clampNum(raw?.fireRate, 0, 100, DEFAULT_UPGRADE_WEIGHTS.fireRate),
+    goldBonus: clampNum(raw?.goldBonus, 0, 100, DEFAULT_UPGRADE_WEIGHTS.goldBonus),
+  };
 }
 
 function loadProgress(): PersistentProgress {
@@ -233,6 +246,7 @@ function loadProgress(): PersistentProgress {
         fireRate: parsed.upgrades?.fireRate ?? 0,
         goldBonus: parsed.upgrades?.goldBonus ?? 0,
       },
+      upgradeSplit: coerceUpgradeSplit(parsed.upgradeSplit),
       muted: Boolean(parsed.muted),
       settings: {
         stageLengthFactor,
@@ -266,6 +280,7 @@ function freshDefaultProgress(muted = false): PersistentProgress {
   return {
     ...DEFAULT_PROGRESS,
     upgrades: { ...DEFAULT_PROGRESS.upgrades },
+    upgradeSplit: { ...DEFAULT_PROGRESS.upgradeSplit },
     settings: { ...DEFAULT_GAMEPLAY_SETTINGS },
     muted,
     settingsVersion: DEFAULT_PROGRESS.settingsVersion,
@@ -283,11 +298,12 @@ function coerceSlotProgress(raw: unknown): PersistentProgress | null {
     bestSquad: Math.max(0, Math.round(clampNum(p.bestSquad, 0, 1_000_000_000, 0))),
     totalKills: Math.max(0, Math.round(clampNum(p.totalKills, 0, 1_000_000_000_000, 0))),
     upgrades: {
-      startSquad: clampNum(p.upgrades?.startSquad, 0, 1000, 0),
-      firepower: clampNum(p.upgrades?.firepower, 0, 1000, 0),
-      fireRate: clampNum(p.upgrades?.fireRate, 0, 1000, 0),
-      goldBonus: clampNum(p.upgrades?.goldBonus, 0, 1000, 0),
+      startSquad: clampNum(p.upgrades?.startSquad, 0, MAX_UPGRADE_LEVEL, 0),
+      firepower: clampNum(p.upgrades?.firepower, 0, MAX_UPGRADE_LEVEL, 0),
+      fireRate: clampNum(p.upgrades?.fireRate, 0, MAX_UPGRADE_LEVEL, 0),
+      goldBonus: clampNum(p.upgrades?.goldBonus, 0, MAX_UPGRADE_LEVEL, 0),
     },
+    upgradeSplit: coerceUpgradeSplit(p.upgradeSplit),
     muted: Boolean(p.muted),
     settings: { ...DEFAULT_GAMEPLAY_SETTINGS, ...saved },
     settingsVersion: DEFAULT_PROGRESS.settingsVersion,
@@ -721,6 +737,27 @@ export default function App() {
     });
   }, []);
 
+  const handleSplitGold = useCallback(() => {
+    sound.unlock();
+    setProgress((prev) => {
+      const result = splitGold(prev.gold, prev.upgrades, prev.upgradeSplit);
+      if (result.spent <= 0) return prev;
+      sound.playUpgrade();
+      return { ...prev, gold: result.gold, upgrades: result.upgrades };
+    });
+  }, []);
+
+  const handleUpgradeWeight = useCallback((key: keyof UpgradeLevels, value: number) => {
+    setProgress((prev) => ({
+      ...prev,
+      upgradeSplit: { ...prev.upgradeSplit, [key]: value },
+    }));
+  }, []);
+
+  const resetUpgradeWeights = useCallback(() => {
+    setProgress((prev) => ({ ...prev, upgradeSplit: { ...DEFAULT_UPGRADE_WEIGHTS } }));
+  }, []);
+
   const steerFromPointer = (clientX: number) => {
     const canvas = canvasRef.current;
     if (!canvas || gameState !== 'PLAYING') return;
@@ -1069,7 +1106,15 @@ export default function App() {
                   </div>
                 )}
 
-                <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
+                <UpgradePanel
+                  gold={progress.gold}
+                  upgrades={progress.upgrades}
+                  weights={progress.upgradeSplit}
+                  onUpgrade={handleUpgrade}
+                  onSplitGold={handleSplitGold}
+                  onWeightChange={handleUpgradeWeight}
+                  onResetWeights={resetUpgradeWeights}
+                />
 
                 <button
                   type="button"
@@ -1159,7 +1204,15 @@ export default function App() {
                   </span>
                 </button>
 
-                <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
+                <UpgradePanel
+                  gold={progress.gold}
+                  upgrades={progress.upgrades}
+                  weights={progress.upgradeSplit}
+                  onUpgrade={handleUpgrade}
+                  onSplitGold={handleSplitGold}
+                  onWeightChange={handleUpgradeWeight}
+                  onResetWeights={resetUpgradeWeights}
+                />
 
                 <div className="flex flex-col sm:flex-row gap-2.5">
                   <button
@@ -1221,7 +1274,15 @@ export default function App() {
                   </span>
                 </button>
 
-                <UpgradePanel gold={progress.gold} upgrades={progress.upgrades} onUpgrade={handleUpgrade} />
+                <UpgradePanel
+                  gold={progress.gold}
+                  upgrades={progress.upgrades}
+                  weights={progress.upgradeSplit}
+                  onUpgrade={handleUpgrade}
+                  onSplitGold={handleSplitGold}
+                  onWeightChange={handleUpgradeWeight}
+                  onResetWeights={resetUpgradeWeights}
+                />
 
                 <div className="flex flex-col sm:flex-row gap-2.5">
                   <button

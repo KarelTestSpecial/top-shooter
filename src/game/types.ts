@@ -38,6 +38,8 @@ export interface PersistentProgress {
   bestSquad: number;
   totalKills: number;
   upgrades: UpgradeLevels;
+  /** Relatieve verdeelsleutel voor de "Verdeel goud"-knop. */
+  upgradeSplit: UpgradeLevels;
   muted: boolean;
   settings: GameplaySettings;
   settingsVersion?: number;
