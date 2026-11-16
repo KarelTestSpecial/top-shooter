@@ -40,19 +40,29 @@ class SoundEngine {
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = isRocket ? 'sawtooth' : isLaser ? 'sine' : 'triangle';
-    const startFreq = isRocket ? 230 : isLaser ? 880 : (isHyper ? 660 : 540) + Math.random() * 90;
-    const endFreq = isRocket ? 70 : isLaser ? 280 : 165;
+    // Raketwerper: zachtere golfvorm + lowpass zodat het niet boven de rest uitspringt.
+    osc.type = isRocket ? 'triangle' : isLaser ? 'sine' : 'triangle';
+    const startFreq = isRocket ? 190 : isLaser ? 880 : (isHyper ? 660 : 540) + Math.random() * 90;
+    const endFreq = isRocket ? 62 : isLaser ? 280 : 165;
     osc.frequency.setValueAtTime(startFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, now + (isRocket ? 0.12 : 0.048));
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + (isRocket ? 0.13 : 0.048));
 
-    gain.gain.setValueAtTime(isRocket ? 0.085 : 0.04, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (isRocket ? 0.13 : 0.052));
+    gain.gain.setValueAtTime(isRocket ? 0.042 : 0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isRocket ? 0.16 : 0.052));
 
-    osc.connect(gain);
+    if (isRocket) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(640, now);
+      filter.Q.setValueAtTime(0.7, now);
+      osc.connect(filter);
+      filter.connect(gain);
+    } else {
+      osc.connect(gain);
+    }
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + (isRocket ? 0.14 : 0.058));
+    osc.stop(now + (isRocket ? 0.17 : 0.058));
   }
 
   playHit() {
@@ -179,11 +189,11 @@ class SoundEngine {
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'sawtooth';
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(190, now);
     osc.frequency.linearRampToValueAtTime(95, now + 0.22);
 
-    gain.gain.setValueAtTime(0.11, now);
+    gain.gain.setValueAtTime(0.055, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -221,10 +231,17 @@ class SoundEngine {
     osc.frequency.setValueAtTime(130, now);
     osc.frequency.exponentialRampToValueAtTime(32, now + 0.32);
 
-    gain.gain.setValueAtTime(0.14, now);
+    // Iets zachter + lowpass: explosies blijven voelbaar maar knallen niet door je koptelefoon.
+    gain.gain.setValueAtTime(0.07, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
 
-    osc.connect(gain);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1100, now);
+    filter.Q.setValueAtTime(0.6, now);
+
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.35);
@@ -294,10 +311,10 @@ class SoundEngine {
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'sawtooth';
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(1120, now);
     osc.frequency.exponentialRampToValueAtTime(210, now + 0.16);
-    gain.gain.setValueAtTime(0.075, now);
+    gain.gain.setValueAtTime(0.045, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -450,6 +467,44 @@ class SoundEngine {
       osc.start(t);
       osc.stop(t + 0.17);
     });
+  }
+
+  playMortarShot() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(60, now + 0.2);
+    gain.gain.setValueAtTime(0.07, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.23);
+  }
+
+  playLaser() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.18);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1800, now);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.21);
   }
 
   playDroneDown() {

@@ -2,6 +2,7 @@ import {
   BossEntity,
   GameplaySettings,
   GateOp,
+  PickupSpec,
   StageWaveEvent,
   UpgradeLevels,
   WeaponTier,
@@ -51,6 +52,7 @@ export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   purpleGateMax: 220,
   miniBossMult: 1.4,
   bossMult: 1.5,
+  specialSituations: 100,
 };
 
 export function getStartSquadCount(upgrades: UpgradeLevels): number {
@@ -118,7 +120,19 @@ export interface EnemySpec {
   x: number;
   count: number;
   hpPerUnit: number;
-  kind: 'RAIDER' | 'BRUTE' | 'RUSHER' | 'TURRET' | 'BOMBER' | 'SNIPER' | 'SPLITTER';
+  kind:
+    | 'RAIDER'
+    | 'BRUTE'
+    | 'RUSHER'
+    | 'TURRET'
+    | 'BOMBER'
+    | 'SNIPER'
+    | 'SPLITTER'
+    | 'JUMPER'
+    | 'MEDIC'
+    | 'MORTAR'
+    | 'SHIELD_UNIT'
+    | 'BERSERKER';
   speed?: number;
 }
 
@@ -259,6 +273,147 @@ function maybeAppendPurpleGate(
       },
     });
   }
+}
+
+const SPECIAL_ENEMY_KINDS: Array<EnemySpec['kind']> = [
+  'JUMPER',
+  'MEDIC',
+  'MORTAR',
+  'SHIELD_UNIT',
+  'BERSERKER',
+];
+
+/** Kans (0..1) dat een speciaal element opduikt, op basis van de instelling. */
+function specialChance(settings: GameplaySettings): number {
+  return Math.max(0, Math.min(100, settings.specialSituations)) / 100;
+}
+
+function specialRoll(stage: number, seed: number): number {
+  return pseudoRand(stage * 313 + seed * 71 + 17);
+}
+
+function specialEnabled(stage: number, seed: number, settings: GameplaySettings): boolean {
+  const chance = specialChance(settings);
+  return chance > 0 && specialRoll(stage, seed) < chance;
+}
+
+/**
+ * Nieuwe vijandtypes: JUMPER (springt over kogels), MEDIC (geneest nabije
+ * golven), MORTAR (telegrafeert artillerie) en SHIELD_UNIT (energieschild).
+ */
+function specialEnemySpec(
+  stage: number,
+  atDistance: number,
+  totalUnits: number,
+  hpScale: number,
+  seed: number,
+  settings: GameplaySettings,
+): EnemySpec | null {
+  if (!specialEnabled(stage, seed, settings)) return null;
+  const kindRoll = pseudoRand(stage * 401 + seed * 97 + 5);
+  const kind = SPECIAL_ENEMY_KINDS[Math.floor(kindRoll * SPECIAL_ENEMY_KINDS.length) % SPECIAL_ENEMY_KINDS.length];
+  const hpByKind: Record<string, number> = { JUMPER: 7.5, MEDIC: 8.5, MORTAR: 11, SHIELD_UNIT: 12, BERSERKER: 9.5 };
+  const xByKind: Record<string, number> = { JUMPER: -0.1, MEDIC: 0.44, MORTAR: -0.52, SHIELD_UNIT: 0.0, BERSERKER: 0.18 };
+  const count =
+    kind === 'SHIELD_UNIT'
+      ? computeEnemyCount(2, atDistance, totalUnits, stage, seed + 1, 'ELITE', settings, true)
+      : kind === 'MORTAR'
+        ? computeEnemyCount(2, atDistance, totalUnits, stage, seed + 2, 'SCOUT', settings)
+        : kind === 'BERSERKER'
+          ? computeEnemyCount(3, atDistance, totalUnits, stage, seed + 3, 'SCOUT', settings)
+          : computeEnemyCount(3, atDistance, totalUnits, stage, seed + 3, 'SCOUT', settings);
+  const speed = kind === 'MORTAR' ? 0.13 : kind === 'MEDIC' ? 0.2 : kind === 'SHIELD_UNIT' ? 0.22 : 0.36;
+  return {
+    x: xByKind[kind],
+    count,
+    hpPerUnit: Math.round(hpByKind[kind] * hpScale),
+    kind,
+    speed,
+  };
+}
+
+/** Nieuwe taktische poorten: FREEZE, MULTISHOT, PIERCE, HEAL, TIMEWARP, FORTIFY, BLITZ, VAMP. */
+function specialGatePair(
+  stage: number,
+  seed: number,
+  settings: GameplaySettings,
+): { left: GateSpec; right: GateSpec } | null {
+  if (!specialEnabled(stage, seed, settings)) return null;
+  const roll = pseudoRand(stage * 509 + seed * 61 + 23);
+  const common = { shootable: false, shotsPerStep: 10 };
+  if (roll < 0.18) {
+    return {
+      left: { op: 'FREEZE', value: 5, ...common },
+      right: { op: 'HEAL', value: 35, ...common },
+    };
+  }
+  if (roll < 0.36) {
+    return {
+      left: { op: 'MULTISHOT', value: 2, ...common },
+      right: { op: 'PIERCE', value: 3, ...common },
+    };
+  }
+  if (roll < 0.54) {
+    return {
+      left: { op: 'TIMEWARP', value: 8, ...common },
+      right: { op: 'FORTIFY', value: 8, ...common },
+    };
+  }
+  if (roll < 0.72) {
+    return {
+      left: { op: 'BLITZ', value: 6, ...common },
+      right: { op: 'VAMP', value: 8, ...common },
+    };
+  }
+  if (roll < 0.86) {
+    return {
+      left: { op: 'FREEZE', value: 5, ...common },
+      right: { op: 'MULTISHOT', value: 2, ...common },
+    };
+  }
+  return {
+    left: { op: 'HEAL', value: 45, ...common },
+    right: { op: 'TIMEWARP', value: 8, ...common },
+  };
+}
+
+/** Veld-pickups die op de brug zweven en opgeraakt worden door erover te rijden. */
+function maybeAppendPickups(
+  events: StageWaveEvent[],
+  atDistance: number,
+  stage: number,
+  seed: number,
+  settings: GameplaySettings,
+) {
+  if (!specialEnabled(stage, seed, settings)) return;
+  const kinds: Array<PickupSpec['kind']> = ['MAGNET', 'FRENZY', 'NUKE', 'SQUAD'];
+  const roll = pseudoRand(stage * 211 + seed * 37 + 9);
+  const kind = kinds[Math.floor(roll * kinds.length) % kinds.length];
+  const value = kind === 'SQUAD' ? 8 + stage * 2 : kind === 'NUKE' ? 0 : 8;
+  const lane = roll < 0.5 ? -0.34 : 0.34;
+  events.push({
+    atDistance,
+    type: 'PICKUPS',
+    payload: [{ x: lane, kind, value }] satisfies PickupSpec[],
+  });
+}
+
+/** Voeg een speciaal vijandtype toe aan de laatste golf binnen [minDist, maxDist). */
+function appendSpecialEnemy(
+  events: StageWaveEvent[],
+  minDist: number,
+  maxDist: number,
+  spec: EnemySpec,
+) {
+  const enemyEvents = events.filter(
+    (ev) => ev.type === 'ENEMIES' && ev.atDistance >= minDist && ev.atDistance < maxDist,
+  );
+  const target = enemyEvents[enemyEvents.length - 1];
+  if (target && Array.isArray(target.payload)) {
+    (target.payload as EnemySpec[]).push(spec);
+    return;
+  }
+  events.push({ atDistance: minDist, type: 'ENEMIES', payload: [spec] });
 }
 
 function appendMiddleBlock(
@@ -704,6 +859,21 @@ function appendMiddleBlock(
     });
   }
 
+  // === Innovatieve situaties (frequentie via settings.specialSituations) ===
+  maybeAppendPickups(events, offset + 10, stage, blockIndex * 10 + 71, settings);
+
+  const specialMid = specialEnemySpec(stage, offset + 76, totalUnits, s, blockIndex * 10 + 72, settings);
+  if (specialMid) {
+    appendSpecialEnemy(events, offset, offset + 88, specialMid);
+  }
+
+  if (blockIndex % 2 === 1) {
+    const specialPair = specialGatePair(stage, blockIndex * 10 + 73, settings);
+    if (specialPair) {
+      events.push({ atDistance: offset + 84, type: 'GATE_PAIR', payload: specialPair });
+    }
+  }
+
   const kinds: Array<BossEntity['kind']> = ['TANK', 'HELI', 'MECH'];
   const miniKind = kinds[(stage + blockIndex) % kinds.length];
   const miniGoldBonus = settings.miniBossMult > 1 ? 1 + (settings.miniBossMult - 1) * 0.35 : 1;
@@ -959,6 +1129,23 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     },
   });
 
+  // === Innovatieve situaties in de openingsact ===
+  maybeAppendPickups(events, 33, stage, 74, settings);
+
+  const openingSpecial = specialEnemySpec(stage, 83, lenCfg.units, hpScale, 75, settings);
+  if (openingSpecial) {
+    appendSpecialEnemy(events, 60, 94, openingSpecial);
+  }
+
+  const openingPairA = specialGatePair(stage, 76, settings);
+  if (openingPairA) {
+    events.push({ atDistance: 48, type: 'GATE_PAIR', payload: openingPairA });
+  }
+  const openingPairB = specialGatePair(stage, 77, settings);
+  if (openingPairB) {
+    events.push({ atDistance: 78, type: 'GATE_PAIR', payload: openingPairB });
+  }
+
   // === MIDDLE ACTS ===
   const extraMiddleBlocks = lenCfg.extraBlocks;
   for (let i = 0; i < extraMiddleBlocks; i++) {
@@ -1128,7 +1315,21 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     ] satisfies BarrelSpec[],
   });
 
-  const bossKinds: Array<BossEntity['kind']> = ['TANK', 'HELI', 'MECH'];
+  // === Innovatieve situaties in de eindact ===
+  maybeAppendPickups(events, finalOffset + 36, stage, 93, settings);
+
+  const finalSpecial = specialEnemySpec(stage, finalOffset + 81, lenCfg.units, finalScale, 94, settings);
+  if (finalSpecial) {
+    appendSpecialEnemy(events, finalOffset + 60, lenCfg.units, finalSpecial);
+  }
+
+  const finalPair = specialGatePair(stage, 95, settings);
+  if (finalPair) {
+    events.push({ atDistance: finalOffset + 56, type: 'GATE_PAIR', payload: finalPair });
+  }
+
+  const bossKinds: Array<BossEntity['kind']> =
+    specialChance(settings) > 0 ? ['TANK', 'HELI', 'MECH', 'CARRIER'] : ['TANK', 'HELI', 'MECH'];
   const bossKind = bossKinds[(stage - 1) % bossKinds.length];
   const bossNames: Record<BossEntity['kind'], string> = {
     TANK: `Pantsertank Mk.${stage}`,

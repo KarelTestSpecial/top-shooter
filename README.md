@@ -2,13 +2,19 @@
 
 Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-**Versie 1.0.0** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
+**Versie 1.2.0** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
 
 ## Functies
 
 - **Schuif & Auto-Vuur**: Bestuur je squad vloeiend met muis, touch of toetsenbord (`A`/`D` of pijltjestoetsen).
 - **Luchtaanval (`Spatie` of tik-knop)**: Laadt op tijdens het spelen en dropt 6 explosieve raketten over de hele breedte van de brug.
 - **Rekenpoortjes & Opschiet-poorten**: Kies tussen `+`, `×`, vuursnelheid-, schade-, schild-, drone- en goudkoorts-poortjes, of schiet negatieve rode poortjes omhoog zodat ze positief worden. Er zijn ook mysterie-poortjes. Vanaf Stage 2 schuiven sommige poortjes over de brug.
+- **Innovatieve situaties** (frequentie instelbaar, standaard 100%):
+  - **Veld-pickups**: zwevende MAGNEET-, FRENZY-, NUKE- en soldaten-pickups die je verzamelt door erover te rijden.
+  - **Nieuwe vijanden**: JUMPER (springt over kogels), MEDIC (geneest nabije golven), MORTAR (telegrafeert artillerie-inslagen), SHIELD_UNIT (energieschild dat eerst breekt) en BERSERKER (chargt en slaat hard toe).
+  - **Nieuwe poorten**: `TIJDSTIL` (bevriest alle vijanden), `+SCHOT` (extra projectielen), `DOORBOOR` (piercing), `HERSTEL` (herstelt een deel van je leger), `SNEL` (tijdsversnelling), `FORT` (tijdelijke vuurkracht-boost), `BLITZ` (snellere vuursnelheid) en `VAMP` (levensherstel uit schade).
+  - **Nieuwe eindbaas**: vanaf stage 4 verschijnt het *Vliegdekschip* (CARRIER) dat bommenwerpers lanceert en spervuur afvuurt.
+  - **Doelwitlaser-scans**: vijandelijke satellietlasers markeren een baan en slaan na een korte waarschuwing toe.
 - **Tonnen, Kratten & TNT**:
   - **TNT-vaten**: Ontploffen in een grote kettingreactie en schakelen omliggende vijanden en tonnen uit.
   - **Wapenkisten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun, Raketwerper en doorborend Plasmakanon.
@@ -26,11 +32,12 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Lange stages**: standaard 3× lengte (~2 minuten per stage).
 - **Rustig tempo**: standaard 90% spelsnelheid.
 - **Paarse MAX-poortjes**: standaard 15% frequentie, waarvan 15% dubbel naast elkaar.
+- **Innovatieve situaties**: standaard 100% — veld-pickups, nieuwe vijandtypes, nieuwe poorten en doelwitlaser-scans. Op 0% speelt alles zoals v1.0.
 - **Vijand-druk**: standaard 130% HP en 115% horde-dichtheid, max. 120 vijanden per golf.
 - **Vlakke power-curve**: squad-schade groeit als `squad^0.6`; vijanden schalen zacht mee met je squad.
 - **Geleidelijke moeilijkheid**: vijanden worden per stage licht talrijker en taaier, met de grote sprongen pas in hogere stages.
 - **Drie voorinstellingen**: *Standaard Arcade* (90% tempo, lange stages), *Snelle Chaos* (140% tempo, 175% HP) en *Oppermacht Sandbox* (plasmakanon, ∞ soldaten, 5 drones).
-- **Instelbaar**: tempo, stage-lengte, vijand-HP, horde-dichtheid, leger-limiet, goud-bonus, mini- en eindbazen, start-schild/-drones, startwapen, arena/biome en paarse MAX-poortjes (frequentie, dubbel/enkel, min/max-hoogte).
+- **Instelbaar**: tempo, stage-lengte, vijand-HP, horde-dichtheid, leger-limiet, goud-bonus, mini- en eindbazen, start-schild/-drones, startwapen, arena/biome, paarse MAX-poortjes (frequentie, dubbel/enkel, min/max-hoogte) en de frequentie van innovatieve situaties.
 
 ## Lokaal draaien
 

@@ -38,6 +38,7 @@ const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> 
       purpleGateMax: 750,
       miniBossMult: 2.0,
       bossMult: 2.2,
+      specialSituations: 100,
     },
   },
   {
@@ -61,6 +62,7 @@ const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> 
       purpleGateMax: 500,
       miniBossMult: 1.2,
       bossMult: 1.2,
+      specialSituations: 100,
     },
   },
 ];
@@ -412,6 +414,35 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* 3b. Innovatieve situaties */}
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/15 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                  Innovatieve situaties
+                </span>
+                <span className="text-[11px] text-emerald-200/75">
+                  {settings.specialSituations <= 0 ? 'Uitgeschakeld' : `${settings.specialSituations}% frequentie`}
+                </span>
+              </div>
+              <SliderRow
+                id="slider-special-situations"
+                label="Frequentie van veld-pickups, nieuwe vijanden, poorten & laser-scans"
+                valueText={settings.specialSituations <= 0 ? 'Uit (0%)' : `${settings.specialSituations}%`}
+                value={settings.specialSituations}
+                min={0}
+                max={100}
+                step={10}
+                accentClass="accent-emerald-400"
+                valueColorClass="text-emerald-300"
+                onChange={(v) => update('specialSituations', Math.round(v))}
+              />
+              <p className="text-[11px] text-slate-400 leading-snug">
+                Op 0% speelt alles zoals v1.0. Hoger = meer MAGNEET/FRENZY/NUKE-pickups,
+                JUMPER/MEDIC/MORTAR/SCHILD/BERSERKER-eenheden, nieuwe MAX-poorten (FREEZE, MULTISHOT, PIERCE, HEAL,
+                TIMEWARP, FORTIFY, BLITZ, VAMP) en vijandelijke doelwitlaser-scans.
+              </p>
             </div>
 
             {/* 4. Leger-limiet & Start-uitrusting */}

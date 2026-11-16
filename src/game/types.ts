@@ -20,6 +20,7 @@ export interface GameplaySettings {
   purpleGateMax: number; // 100 .. 1250
   miniBossMult: number; // 0.4 .. 4.0 (step 0.2)
   bossMult: number; // 0.4 .. 4.0 (step 0.2)
+  specialSituations: number; // 0 .. 100 (%) — frequentie van veld-pickups, nieuwe vijanden, poorten en omgevingshazards
 }
 
 export type WeaponTier = 'RIFLE' | 'DOUBLE' | 'SPREAD' | 'ROCKET' | 'LASER';
@@ -53,7 +54,15 @@ export type GateOp =
   | 'SHIELD_ADD'
   | 'DRONE_ADD'
   | 'GOLD_RUSH'
-  | 'MYSTERY';
+  | 'MYSTERY'
+  | 'FREEZE'
+  | 'MULTISHOT'
+  | 'PIERCE'
+  | 'HEAL'
+  | 'TIMEWARP'
+  | 'FORTIFY'
+  | 'BLITZ'
+  | 'VAMP';
 
 export interface GateEntity {
   id: number;
@@ -134,6 +143,20 @@ export interface EnemyUnit {
   alive: boolean;
 }
 
+export type EnemyKind =
+  | 'RAIDER'
+  | 'BRUTE'
+  | 'RUSHER'
+  | 'TURRET'
+  | 'BOMBER'
+  | 'SNIPER'
+  | 'SPLITTER'
+  | 'SHIELD_UNIT'
+  | 'JUMPER'
+  | 'MEDIC'
+  | 'MORTAR'
+  | 'BERSERKER';
+
 export interface EnemyGroup {
   id: number;
   x: number;
@@ -143,18 +166,7 @@ export interface EnemyGroup {
   maxCount: number;
   hpPerUnit: number;
   currentFrontHp: number;
-  kind:
-    | 'RAIDER'
-    | 'BRUTE'
-    | 'RUSHER'
-    | 'TURRET'
-    | 'BOMBER'
-    | 'SNIPER'
-    | 'SPLITTER'
-    | 'SHIELD_UNIT'
-    | 'JUMPER'
-    | 'MEDIC'
-    | 'MORTAR';
+  kind: EnemyKind;
   fireTimer: number;
   actionTimer?: number;
   shieldHp?: number;
@@ -162,6 +174,12 @@ export interface EnemyGroup {
   aimX?: number;
   aimLocked?: boolean;
   flashTimer: number;
+  jumpTimer?: number;
+  jumpCooldown?: number;
+  healTimer?: number;
+  attackMode?: number;
+  modeTimer?: number;
+  chargeTimer?: number;
   units: EnemyUnit[];
 }
 
@@ -183,7 +201,6 @@ export interface BossEntity {
   telegraphLanes: number[];
   telegraphTimer: number;
   summonedReinforcements?: boolean;
-  droppedEnrageCrate?: boolean;
   patternStep?: number;
 }
 
@@ -196,6 +213,12 @@ export interface FieldPickup {
   collected: boolean;
 }
 
+export interface PickupSpec {
+  x: number;
+  kind: FieldPickup['kind'];
+  value: number;
+}
+
 export interface MortarStrike {
   id: number;
   x: number;
@@ -204,6 +227,18 @@ export interface MortarStrike {
   maxTimer: number;
   radius: number;
   damage: number;
+  kind: 'MORTAR' | 'LASER' | 'BARRAGE' | 'FLANK';
+  droneDamage: boolean;
+  radiusMax?: number;
+  aimed?: boolean;
+}
+
+export interface BeamFlash {
+  x: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  width: number;
 }
 
 export interface LightningArc {
@@ -305,6 +340,11 @@ export interface HudSnapshot {
   magnetActive: boolean;
   frenzyActive: boolean;
   cryoActive: boolean;
+  freezeActive: boolean;
+  timewarpActive?: boolean;
+  fortifyActive?: boolean;
+  blitzActive?: boolean;
+  vampActive?: boolean;
   comboCount: number;
   biomeName: string;
   stage: number;

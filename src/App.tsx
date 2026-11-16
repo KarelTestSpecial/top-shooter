@@ -157,6 +157,13 @@ function loadProgress(): PersistentProgress {
           ? legacyBossMap[saved.bossStrength]
           : DEFAULT_GAMEPLAY_SETTINGS.bossMult;
 
+    const specialSituations = clampNum(
+      saved.specialSituations,
+      0,
+      100,
+      DEFAULT_GAMEPLAY_SETTINGS.specialSituations,
+    );
+
     let enemyMaxGroupSize = enemyMaxGroupSizeRaw;
     if (
       (parsed.settingsVersion ?? 1) < 4 &&
@@ -241,8 +248,9 @@ function loadProgress(): PersistentProgress {
         purpleGateMax,
         miniBossMult,
         bossMult,
+        specialSituations,
       },
-      settingsVersion: 8,
+      settingsVersion: 9,
     };
   } catch {
     return DEFAULT_PROGRESS;
@@ -288,6 +296,11 @@ export default function App() {
     magnetActive: false,
     frenzyActive: false,
     cryoActive: false,
+    freezeActive: false,
+    timewarpActive: false,
+    fortifyActive: false,
+    blitzActive: false,
+    vampActive: false,
     comboCount: 0,
     biomeName: 'Kustbrug',
     stage: 1,
@@ -726,6 +739,18 @@ export default function App() {
             </span>
             <span className="ml-auto font-mono-num">Luchtaanval {hud.airstrikeCharge}%</span>
           </div>
+          {(hud.freezeActive || hud.magnetActive || hud.frenzyActive || hud.cryoActive || hud.timewarpActive || hud.fortifyActive || hud.blitzActive || hud.vampActive) && (
+            <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+              {hud.freezeActive && <span className="text-cyan-300">TIJDSTIL</span>}
+              {hud.magnetActive && <span className="text-cyan-300">MAGNEET</span>}
+              {hud.frenzyActive && <span className="text-orange-300">FRENZY</span>}
+              {hud.cryoActive && <span className="text-sky-300">CRYO</span>}
+              {hud.timewarpActive && <span className="text-emerald-300">SNEL</span>}
+              {hud.fortifyActive && <span className="text-blue-300">FORT</span>}
+              {hud.blitzActive && <span className="text-yellow-300">BLITZ</span>}
+              {hud.vampActive && <span className="text-rose-300">VAMP</span>}
+            </div>
+          )}
         </div>
 
         {/* Dominant Arena Viewport */}
@@ -1136,6 +1161,16 @@ export default function App() {
                       kan ze raken en vernietigen.
                     </p>
                   </div>
+                  <div className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 font-mono-num text-xs font-bold text-emerald-300">
+                      5
+                    </span>
+                    <p>
+                      <strong className="text-slate-100">Nieuwe situaties</strong>: rijd over zwevende
+                      pickups (MAGNEET, FRENZY, NUKE, soldaten) en let op JUMPER-, MEDIC-, MORTAR- en
+                      SCHILD-eenheden. Nieuwe MAX-poorten kunnen tijd bevriezen, extra schoten geven of je leger herstellen.
+                    </p>
+                  </div>
                 </div>
 
                 <button
@@ -1206,6 +1241,10 @@ export default function App() {
             <div>
               <div className="text-xs font-medium text-slate-400">
                 {hud.biomeName} · Lengte {stageLenLabel}
+                {hud.timewarpActive && <span className="ml-2 text-emerald-300">SNEL</span>}
+                {hud.fortifyActive && <span className="ml-2 text-blue-300">FORT</span>}
+                {hud.blitzActive && <span className="ml-2 text-yellow-300">BLITZ</span>}
+                {hud.vampActive && <span className="ml-2 text-rose-300">VAMP</span>}
               </div>
               <div className="mt-0.5 flex items-baseline justify-between">
                 <span className="font-display text-3xl font-extrabold text-white">Stage {hud.stage}</span>
@@ -1235,6 +1274,35 @@ export default function App() {
                 />
               </div>
             </div>
+
+            {(hud.freezeActive || hud.magnetActive || hud.frenzyActive || hud.cryoActive || hud.timewarpActive || hud.fortifyActive || hud.blitzActive || hud.vampActive) && (
+              <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                {hud.freezeActive && (
+                  <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-cyan-200">TIJDSTIL</span>
+                )}
+                {hud.magnetActive && (
+                  <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-cyan-200">MAGNEET</span>
+                )}
+                {hud.frenzyActive && (
+                  <span className="rounded bg-orange-500/20 px-2 py-0.5 text-orange-200">FRENZY</span>
+                )}
+                {hud.cryoActive && (
+                  <span className="rounded bg-sky-500/20 px-2 py-0.5 text-sky-200">CRYO</span>
+                )}
+                {hud.timewarpActive && (
+                  <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-200">SNEL</span>
+                )}
+                {hud.fortifyActive && (
+                  <span className="rounded bg-blue-500/20 px-2 py-0.5 text-blue-200">FORT</span>
+                )}
+                {hud.blitzActive && (
+                  <span className="rounded bg-yellow-500/20 px-2 py-0.5 text-yellow-200">BLITZ</span>
+                )}
+                {hud.vampActive && (
+                  <span className="rounded bg-rose-500/20 px-2 py-0.5 text-rose-200">VAMP</span>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
@@ -1312,7 +1380,7 @@ export default function App() {
               {Math.round(s.gameSpeed * 100)}% tempo · {Math.round(s.enemyCountMult * 100)}% hordes (max {s.enemyMaxGroupSize}) ·{' '}
               {maxSquadLabel} · MAX-poorten {s.purpleGateFreq}% ({s.purpleDoubleChance}% dubbel) ·{' '}
               Mini {s.miniBossMult.toFixed(1).replace('.', ',')}× · Baas {s.bossMult.toFixed(1).replace('.', ',')}× ·{' '}
-              {WEAPON_LABELS[s.startWeapon]}
+              Speciale situaties {s.specialSituations}% · {WEAPON_LABELS[s.startWeapon]}
             </p>
           </div>
         </aside>
