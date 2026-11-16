@@ -67,6 +67,32 @@ export function getFirepowerMultiplier(upgrades: UpgradeLevels): number {
   return 1 + upgrades.firepower * 0.12;
 }
 
+/**
+ * Machtschaal voor de speler. Stages 1 t/m 10 blijven identiek aan voorheen;
+ * vanaf stage 11 (waar de vijand-HP sneller opliep dan de squad-schade) groeit
+ * de vuurkracht mee, zodat de time-to-kill niet plots een muur wordt.
+ */
+export function getPlayerWeaponScale(stage: number): number {
+  const s = Math.max(1, Math.floor(stage));
+  return s <= 10 ? 1 : Math.pow(1.15, Math.min(18, s - 10));
+}
+
+/**
+ * Gedeelde moeilijkheidsboog. De eerste stages lopen stevig op; vanaf de knie
+ * (stage 10) vlakt de groei af zodat stage 11 geen plotselinge muur wordt.
+ */
+export function getStageCurve(
+  stage: number,
+  earlyBase: number,
+  lateBase: number,
+  knee = 10,
+): number {
+  const s = Math.max(1, Math.floor(stage));
+  const early = Math.pow(earlyBase, Math.min(s - 1, knee - 1));
+  const late = s > knee ? Math.pow(lateBase, s - knee) : 1;
+  return early * late;
+}
+
 export function getFireRateMultiplier(upgrades: UpgradeLevels): number {
   return 1 + upgrades.fireRate * 0.08;
 }
@@ -183,7 +209,7 @@ function computeEnemyCount(
   isEliteHeavy = false,
 ): number {
   const progress = totalUnits > 0 ? Math.max(0, Math.min(1, atDistance / totalUnits)) : 0;
-  const levelScale = Math.pow(1.18, Math.min(stage - 1, 14));
+  const levelScale = getStageCurve(stage, 1.18, 1.08);
   const roadScale = 0.45 + 0.95 * progress;
 
   const roll = pseudoRand(stage * 167 + seedIndex * 53 + Math.round(atDistance) * 11);
@@ -885,7 +911,7 @@ function appendMiddleBlock(
       name: `Sector-Commandant ${stage}.${blockIndex + 1}`,
       hp: Math.round(
         560 *
-          Math.pow(1.3, stage - 1) *
+          getStageCurve(stage, 1.3, 1.1) *
           (1 + blockIndex * 0.25) *
           settings.enemyHpMult *
           settings.miniBossMult,
@@ -898,7 +924,7 @@ function appendMiddleBlock(
 export function generateStageEvents(stage: number, settings: GameplaySettings): StageWaveEvent[] {
   const lenCfg = getStageLengthMetrics(settings.stageLengthFactor);
 
-  const baseScale = Math.pow(1.24, stage - 1);
+  const baseScale = getStageCurve(stage, 1.24, 1.1);
   const hpScale = baseScale * settings.enemyHpMult;
   const barrierDmg = Math.max(2, Math.round((6 + stage * 1.1) * Math.sqrt(settings.enemyHpMult)));
 
@@ -1124,7 +1150,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     payload: {
       kind: miniBossKind,
       name: `Voorhoede-Kapitein ${stage}`,
-      hp: Math.round(500 * Math.pow(1.3, stage - 1) * settings.enemyHpMult * settings.miniBossMult),
+      hp: Math.round(500 * getStageCurve(stage, 1.3, 1.1) * settings.enemyHpMult * settings.miniBossMult),
       goldReward: Math.round((65 + stage * 28) * settings.goldMult * miniGoldBonus),
     },
   });
@@ -1347,7 +1373,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       name: bossNames[bossKind],
       hp: Math.round(
         1400 *
-          Math.pow(1.32, stage - 1) *
+          getStageCurve(stage, 1.32, 1.12) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *
           settings.bossMult,

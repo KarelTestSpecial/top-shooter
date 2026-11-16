@@ -8,6 +8,8 @@ import {
   getFireRateMultiplier,
   getFirepowerMultiplier,
   getGoldMultiplier,
+  getPlayerWeaponScale,
+  getStageCurve,
   getStageLengthMetrics,
   getStartSquadCount,
 } from './stages';
@@ -372,7 +374,10 @@ export class GameEngine {
     this.airstrikeCharge = 0;
     sound.playAirstrike();
 
-    const baseDamage = (65 + this.squadCount * 3.5) * getFirepowerMultiplier(this.upgrades);
+    const baseDamage =
+      (65 + this.squadCount * 3.5) *
+      getFirepowerMultiplier(this.upgrades) *
+      getPlayerWeaponScale(this.stage);
     const lanes = [-0.62, -0.36, -0.1, 0.16, 0.42, 0.64];
     lanes.forEach((lx, idx) => {
       this.missiles.push({
@@ -676,9 +681,17 @@ export class GameEngine {
             : b.kind === 'HYPER_CRATE'
             ? { type: 'HYPER' as const, charge: 50 }
             : b.kind === 'TESLA_CRATE'
-            ? { type: 'TESLA' as const, damage: Math.round(70 * Math.pow(1.24, this.stage - 1)), chains: 5 }
+            ? {
+                type: 'TESLA' as const,
+                damage: Math.round(70 * Math.pow(1.24, this.stage - 1)),
+                chains: 6 + Math.min(4, Math.floor(this.stage / 3)),
+              }
             : b.kind === 'TNT_BARREL'
-            ? { type: 'TNT' as const, radius: 0.58, damage: Math.round(95 * Math.pow(1.36, this.stage - 1) * this.difficultyDmgMult) }
+            ? {
+                type: 'TNT' as const,
+                radius: 0.75,
+                damage: Math.round(95 * Math.pow(1.36, this.stage - 1) * this.difficultyDmgMult),
+              }
             : { type: 'GOLD' as const, amount: b.goldAmount ?? (b.kind === 'GOLD_SAFE' ? 40 + this.stage * 5 : 12) };
 
         this.barrels.push({
@@ -815,7 +828,13 @@ export class GameEngine {
     const activeShooters = Math.min(7, Math.max(1, Math.ceil(this.squadCount / 4)));
     const effectiveSquadPower = Math.pow(this.squadCount, 0.6);
     const fortifyMult = this.fortifyTimer > 0 ? 1.35 : 1;
-    const dmgScale = (effectiveSquadPower / activeShooters) * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * fortifyMult;
+    const stagePower = getPlayerWeaponScale(this.stage);
+    const dmgScale =
+      (effectiveSquadPower / activeShooters) *
+      getFirepowerMultiplier(this.upgrades) *
+      this.tempDamageBonus *
+      fortifyMult *
+      stagePower;
     const critChance = Math.min(0.4, this.comboCount * 0.012);
     const isCrit = Math.random() < critChance;
     const bulletDamage =
@@ -916,7 +935,11 @@ export class GameEngine {
     if (this.droneCooldown > 0) return;
     this.droneCooldown = this.hyperTimer > 0 ? 0.22 : 0.34;
 
-    const dmg = 8.5 * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus;
+    const dmg =
+      8.5 *
+      getFirepowerMultiplier(this.upgrades) *
+      this.tempDamageBonus *
+      getPlayerWeaponScale(this.stage);
     for (const drone of this.drones) {
       const dx = this.droneX(drone.slot);
       this.bullets.push({
@@ -1108,7 +1131,7 @@ export class GameEngine {
 
   private triggerTeslaBlast(origin: { x: number; z: number }, damage: number, chains: number) {
     const targets = this.enemies
-      .filter((g) => g.count > 0 && Math.hypot(g.x - origin.x, (g.z - origin.z) * 1.6) < 0.9)
+      .filter((g) => g.count > 0 && Math.hypot(g.x - origin.x, (g.z - origin.z) * 1.6) < 1.15)
       .sort(
         (a, b) =>
           Math.hypot(a.x - origin.x, (a.z - origin.z) * 1.6) -
@@ -1140,7 +1163,7 @@ export class GameEngine {
       this.spawnShockwave(p.x, p.y, '#A855F7', 55);
       prev = p;
     }
-    if (this.boss && Math.hypot(this.boss.x - origin.x, (this.boss.z - origin.z) * 1.4) < 0.9) {
+    if (this.boss && Math.hypot(this.boss.x - origin.x, (this.boss.z - origin.z) * 1.4) < 1.15) {
       this.damageBoss(damage * 0.8);
       const bp = this.project(this.boss.x, this.boss.z);
       this.spawnShockwave(bp.x, bp.y, '#A855F7', 70);
@@ -1924,7 +1947,7 @@ export class GameEngine {
   private spawnBossReinforcements(boss: BossEntity) {
     const escortCount = Math.max(6, Math.min(28, 6 + this.stage * 2));
     const unitHp = Math.round(
-      5.5 * Math.pow(1.32, this.stage - 1) * this.difficultyDmgMult * this.squadThreatFactor(),
+      5.5 * getStageCurve(this.stage, 1.32, 1.12) * this.difficultyDmgMult * this.squadThreatFactor(),
     );
     for (const sideX of [-0.52, 0.52]) {
       const spriteCap = Math.min(24, escortCount);
@@ -2047,7 +2070,7 @@ export class GameEngine {
     const count = Math.max(3, Math.min(10, 3 + Math.floor(this.stage / 2)));
     const hp = Math.max(
       2,
-      Math.round(6 * Math.pow(1.28, this.stage - 1) * this.difficultyDmgMult * this.squadThreatFactor()),
+      Math.round(6 * getStageCurve(this.stage, 1.28, 1.1) * this.difficultyDmgMult * this.squadThreatFactor()),
     );
     for (const sideX of [-0.4, 0, 0.4]) {
       const spriteCap = Math.min(10, count);
@@ -2399,8 +2422,20 @@ export class GameEngine {
     const shotsPerSec = effectiveRate / spec.fireInterval;
     const effectiveSquadPower = Math.pow(this.squadCount, 0.6);
     const dmgPerVolley =
-      effectiveSquadPower * spec.damage * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * 0.48 * (this.hyperTimer > 0 ? 1.2 : 1);
-    const droneDps = this.droneCount * 8.5 * getFirepowerMultiplier(this.upgrades) * this.tempDamageBonus * (1 / 0.34);
+      effectiveSquadPower *
+      spec.damage *
+      getFirepowerMultiplier(this.upgrades) *
+      this.tempDamageBonus *
+      getPlayerWeaponScale(this.stage) *
+      0.48 *
+      (this.hyperTimer > 0 ? 1.2 : 1);
+    const droneDps =
+      this.droneCount *
+      8.5 *
+      getFirepowerMultiplier(this.upgrades) *
+      this.tempDamageBonus *
+      getPlayerWeaponScale(this.stage) *
+      (1 / 0.34);
     const dps = Math.round(shotsPerSec * dmgPerVolley + droneDps);
 
     this.callbacks.onHudUpdate({

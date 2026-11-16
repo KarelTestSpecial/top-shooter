@@ -2,7 +2,7 @@
 
 Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-**Versie 1.2.0** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
+**Versie 1.2.1** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
 
 ## Functies
 
@@ -16,10 +16,10 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
   - **Nieuwe eindbaas**: vanaf stage 4 verschijnt het *Vliegdekschip* (CARRIER) dat bommenwerpers lanceert en spervuur afvuurt.
   - **Doelwitlaser-scans**: vijandelijke satellietlasers markeren een baan en slaan na een korte waarschuwing toe.
 - **Tonnen, Kratten & TNT**:
-  - **TNT-vaten**: Ontploffen in een grote kettingreactie en schakelen omliggende vijanden en tonnen uit.
+  - **TNT-vaten**: Ontploffen in een grote kettingreactie (ruime blastradius) en schakelen omliggende vijanden en tonnen uit.
   - **Wapenkisten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun, Raketwerper en doorborend Plasmakanon.
   - **Schild- & Dronekratten**: Voeg beschermende energieschilden en flankerende aanvalsdrones toe. Drones zijn kwetsbaar: vijandelijk vuur kan ze raken en vernietigen.
-  - **Cryo-, Hyper- & Tesla-kratten**: Vertraag alle vijanden, laad je hypervuur op of ontketen een bliksemketting.
+  - **Cryo-, Hyper- & Tesla-kratten**: Vertraag alle vijanden, laad je hypervuur op of ontketen een bliksemketting die met de stage meer vijanden raakt (tot 10) over een ruimere straal.
   - **Goudkluizen**: Grote goudbeloningen voor wie de tijd neemt om ze open te breken.
 - **Barricades**: versperringen op de brug — schiet ze op tijd neer of je squad verliest soldaten.
 - **Vijanden**: rushers, raiders, turrets, brutes en bommers, plus sluipschutters met lang bereik en splitters die bij hun dood in twee groepen uiteenvallen.
@@ -36,7 +36,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Innovatieve situaties**: standaard 100% — veld-pickups, nieuwe vijandtypes, nieuwe poorten en doelwitlaser-scans. Op 0% speelt alles zoals v1.0.
 - **Vijand-druk**: standaard 130% HP en 115% horde-dichtheid, max. 120 vijanden per golf.
 - **Vlakke power-curve**: squad-schade groeit als `squad^0.6`; vijanden schalen zacht mee met je squad.
-- **Geleidelijke moeilijkheid**: vijanden worden per stage licht talrijker en taaier, met de grote sprongen pas in hogere stages.
+- **Geleidelijke moeilijkheid**: vijanden worden per stage licht talrijker en taaier. Vanaf **stage 11** vlakt die groei af (HP ×1.10, aantal ×1.08 per stage) en groeit je eigen vuurkracht mee (×1.15 per stage), zodat stage 11 geen plotselinge muur is. Stages 1–10 zijn ongewijzigd.
 - **Drie voorinstellingen**: *Standaard Arcade* (90% tempo, lange stages), *Snelle Chaos* (140% tempo, 175% HP) en *Oppermacht Sandbox* (plasmakanon, ∞ soldaten, 5 drones).
 - **Instelbaar**: tempo, stage-lengte, vijand-HP, horde-dichtheid, leger-limiet, goud-bonus, mini- en eindbazen, start-schild/-drones, startwapen, arena/biome, paarse MAX-poortjes (frequentie, dubbel/enkel, min/max-hoogte) en de frequentie van innovatieve situaties.
 
