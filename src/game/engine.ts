@@ -54,6 +54,15 @@ interface BiomeTheme {
   curb: string;
 }
 
+/**
+ * Afstand tussen twee baas-lanes, in genormaliseerde X-eenheden.
+ * De treffer-test is |kogel.x - playerX| < hazard-radius + speler-half,
+ * dus de ruimte tussen twee kogels moet > 2 × (0.13 + 0.10) = 0.46 zijn,
+ * anders is het midden technisch onbereikbaar en word je altijd geraakt.
+ * 0.55 geeft ±0.045 speelruimte om er tussen te staan.
+ */
+const BOSS_LANE_GAP = 0.55;
+
 const BIOMES: BiomeTheme[] = [
   {
     name: 'Kustbrug',
@@ -2002,7 +2011,7 @@ export class GameEngine {
               if (boss.patternStep % 2 === 0) {
                 this.spawnCarrierBombers(boss);
               } else {
-                const spread = enraged ? 0.5 : 0.42;
+                const spread = BOSS_LANE_GAP;
                 boss.telegraphLanes = [
                   Math.max(-0.72, primary - spread),
                   primary,
@@ -2010,14 +2019,14 @@ export class GameEngine {
                 ];
               }
             } else if (enraged) {
-              const leftLane = Math.max(-0.72, primary - 0.44);
-              const rightLane = Math.min(0.72, primary + 0.44);
+              const leftLane = Math.max(-0.72, primary - BOSS_LANE_GAP);
+              const rightLane = Math.min(0.72, primary + BOSS_LANE_GAP);
               boss.telegraphLanes =
                 boss.kind === 'TANK'
                   ? [-0.52, primary, 0.52]
                   : [leftLane, primary, rightLane];
             } else if (!boss.isMiniBoss || boss.kind === 'TANK') {
-              const offset = primary > 0 ? -0.44 : 0.44;
+              const offset = primary > 0 ? -BOSS_LANE_GAP : BOSS_LANE_GAP;
               boss.telegraphLanes = [primary, Math.max(-0.7, Math.min(0.7, primary + offset))];
             } else {
               boss.telegraphLanes = [primary];

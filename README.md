@@ -26,6 +26,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Combo-Streak & Hypervuur**: Snelle eliminaties bouwen je Combo op voor hogere kritieke trefferkans en laden Hypervuur op (`2×` goud en extra vuursnelheid).
 - **Afwisselende Biomes & Eindbazen**: Wisselt tussen *Kustbrug*, *Woestijnkloof* en *Nacht-Reactor*, elk afgesloten door een eindbaas (tank, heli, mech of carrier) met een Woede-Fase onder 55% HP.
 - **Directe Upgrades**: Besteed goud tussen rondes direct aan **Start-Squad**, **Vuurkracht**, **Vuursnelheid** en **Goudbonus**.
+- **3 Opslag-slots & Clean Slate**: Sla je volledige spelersstatus (goud, upgrades, record, hoogste stage, kills en instellingen) op in één van de 3 slots, laad een status later terug, of begin met een **clean slate** (de slots blijven bewaard).
 
 ## Balans
 

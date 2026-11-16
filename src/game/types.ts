@@ -43,6 +43,15 @@ export interface PersistentProgress {
   settingsVersion?: number;
 }
 
+/** Een handmatig opgeslagen momentopname van de volledige spelersstatus. */
+export interface SaveSlot {
+  savedAt: number;
+  progress: PersistentProgress;
+}
+
+/** Vaste 3 opslag-slots (elke kan null/ledig zijn). */
+export type SaveSlots = [SaveSlot | null, SaveSlot | null, SaveSlot | null];
+
 export type GateOp =
   | 'ADD'
   | 'SUB'

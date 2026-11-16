@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, Crosshair, HelpCircle, Home, Pause, Play, RotateCcw, Shield, SlidersHorizontal, Square, Volume2, VolumeX, X } from 'lucide-react';
+import { Bot, Crosshair, HelpCircle, Home, Pause, Play, RotateCcw, Save, Shield, SlidersHorizontal, Square, Volume2, VolumeX, X } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
+import { SaveSlotsModal } from './components/SaveSlotsModal';
 import { UpgradePanel } from './components/UpgradePanel';
 import { GameEngine, WEAPON_LABELS } from './game/engine';
 import { sound } from './game/sound';
@@ -17,10 +18,13 @@ import {
   GameplaySettings,
   HudSnapshot,
   PersistentProgress,
+  SaveSlots,
   UpgradeLevels,
 } from './game/types';
 
 const STORAGE_KEY = 'poortrush_progress_v1';
+const SLOTS_KEY = 'poortrush_slots_v1';
+const SLOT_COUNT = 3;
 
 const DEFAULT_PROGRESS: PersistentProgress = {
   gold: 0,
@@ -257,9 +261,63 @@ function loadProgress(): PersistentProgress {
   }
 }
 
+/** Een verse, volledig losgekoppelde kopie van de beginstatus. */
+function freshDefaultProgress(muted = false): PersistentProgress {
+  return {
+    ...DEFAULT_PROGRESS,
+    upgrades: { ...DEFAULT_PROGRESS.upgrades },
+    settings: { ...DEFAULT_GAMEPLAY_SETTINGS },
+    muted,
+    settingsVersion: DEFAULT_PROGRESS.settingsVersion,
+  };
+}
+
+/** Normaliseert een ruwe slot-status naar een geldige PersistentProgress. */
+function coerceSlotProgress(raw: unknown): PersistentProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Partial<PersistentProgress> & { settings?: Partial<GameplaySettings> };
+  const saved = (p.settings ?? {}) as Partial<GameplaySettings>;
+  return {
+    gold: Math.max(0, clampNum(p.gold, 0, Number.MAX_SAFE_INTEGER, 0)),
+    highestStage: Math.max(1, Math.round(clampNum(p.highestStage, 1, 9999, 1))),
+    bestSquad: Math.max(0, Math.round(clampNum(p.bestSquad, 0, 1_000_000_000, 0))),
+    totalKills: Math.max(0, Math.round(clampNum(p.totalKills, 0, 1_000_000_000_000, 0))),
+    upgrades: {
+      startSquad: clampNum(p.upgrades?.startSquad, 0, 1000, 0),
+      firepower: clampNum(p.upgrades?.firepower, 0, 1000, 0),
+      fireRate: clampNum(p.upgrades?.fireRate, 0, 1000, 0),
+      goldBonus: clampNum(p.upgrades?.goldBonus, 0, 1000, 0),
+    },
+    muted: Boolean(p.muted),
+    settings: { ...DEFAULT_GAMEPLAY_SETTINGS, ...saved },
+    settingsVersion: DEFAULT_PROGRESS.settingsVersion,
+  };
+}
+
+function loadSlots(): SaveSlots {
+  const empty: SaveSlots = [null, null, null];
+  try {
+    const raw = localStorage.getItem(SLOTS_KEY);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return empty;
+    return Array.from({ length: SLOT_COUNT }, (_, i) => {
+      const entry = parsed[i] as { savedAt?: unknown; progress?: unknown } | null;
+      if (!entry || typeof entry !== 'object') return null;
+      const progress = coerceSlotProgress(entry.progress);
+      if (!progress) return null;
+      return { savedAt: typeof entry.savedAt === 'number' ? entry.savedAt : Date.now(), progress };
+    }) as SaveSlots;
+  } catch {
+    return empty;
+  }
+}
+
 export default function App() {
   const [progress, setProgress] = useState<PersistentProgress>(() => loadProgress());
   const [selectedStage, setSelectedStage] = useState<number>(() => loadProgress().highestStage);
+  const [slots, setSlots] = useState<SaveSlots>(() => loadSlots());
+  const [showSaves, setShowSaves] = useState(false);
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(() => {
@@ -333,6 +391,14 @@ export default function App() {
   }, [progress]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(SLOTS_KEY, JSON.stringify(slots));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [slots]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -403,6 +469,57 @@ export default function App() {
     setRunSummary(null);
     setGameState('TITLE_MENU');
   }, []);
+
+  const handleSaveSlot = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= SLOT_COUNT) return;
+      sound.unlock();
+      const snapshot: PersistentProgress = {
+        ...progress,
+        upgrades: { ...progress.upgrades },
+        settings: { ...progress.settings },
+      };
+      setSlots((prev) => {
+        const next = [...prev] as SaveSlots;
+        next[index] = { savedAt: Date.now(), progress: snapshot };
+        return next;
+      });
+    },
+    [progress],
+  );
+
+  const handleLoadSlot = useCallback(
+    (index: number) => {
+      const slot = slots[index];
+      if (!slot) return;
+      sound.unlock();
+      setProgress({
+        ...slot.progress,
+        upgrades: { ...slot.progress.upgrades },
+        settings: { ...slot.progress.settings },
+      });
+      setSelectedStage(slot.progress.highestStage);
+      goToTitleMenu();
+      setShowSaves(false);
+    },
+    [slots, goToTitleMenu],
+  );
+
+  const handleDeleteSlot = useCallback((index: number) => {
+    setSlots((prev) => {
+      const next = [...prev] as SaveSlots;
+      next[index] = null;
+      return next;
+    });
+  }, []);
+
+  const handleCleanSlate = useCallback(() => {
+    sound.unlock();
+    setProgress(freshDefaultProgress(progress.muted));
+    setSelectedStage(1);
+    goToTitleMenu();
+    setShowSaves(false);
+  }, [progress.muted, goToTitleMenu]);
 
   const dismissHelp = useCallback(() => {
     setShowHelp(false);
@@ -485,6 +602,10 @@ export default function App() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (showSaves) {
+        if (e.key === 'Escape') setShowSaves(false);
+        return;
+      }
       if (showHelp) {
         if (e.key === 'Escape') dismissHelp();
         return;
@@ -545,7 +666,7 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gameState, showSettings, showHelp, showStopConfirm, dismissHelp, cancelStop, requestStop]);
+  }, [gameState, showSettings, showHelp, showSaves, showStopConfirm, dismissHelp, cancelStop, requestStop]);
 
   const startStage = useCallback(
     (stageToPlay: number) => {
@@ -653,6 +774,17 @@ export default function App() {
             >
               <SlidersHorizontal className="h-3.5 w-3.5 text-sky-400" />
               <span className="hidden sm:inline">Parameters</span>
+            </button>
+          )}
+
+          {gameState !== 'PLAYING' && gameState !== 'PAUSED' && (
+            <button
+              type="button"
+              onClick={() => setShowSaves(true)}
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs font-medium text-slate-200 hover:border-emerald-500/60 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            >
+              <Save className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Opslag</span>
             </button>
           )}
 
@@ -858,14 +990,24 @@ export default function App() {
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                     Kies rekenpoortjes, blaas TNT-vaten op, pak wapenkisten en stel je eigen speelstijl in.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowHelp(true)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
-                  >
-                    <HelpCircle className="h-3.5 w-3.5" />
-                    <span>Zo speel je</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowHelp(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                      <span>Zo speel je</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSaves(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      <span>Opslag &amp; clean slate</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Stage-lengte & Parameters Bar */}
@@ -1231,6 +1373,18 @@ export default function App() {
               currentStage={gameState === 'PLAYING' || gameState === 'PAUSED' ? hud.stage : selectedStage}
               onChange={updateSettings}
               onClose={() => setShowSettings(false)}
+            />
+          )}
+
+          {showSaves && (
+            <SaveSlotsModal
+              progress={progress}
+              slots={slots}
+              onSave={handleSaveSlot}
+              onLoad={handleLoadSlot}
+              onDelete={handleDeleteSlot}
+              onCleanSlate={handleCleanSlate}
+              onClose={() => setShowSaves(false)}
             />
           )}
         </div>
