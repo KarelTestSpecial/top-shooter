@@ -25,13 +25,27 @@ export const STAGE_LENGTH_PRESETS: Array<{ factor: number; label: string; shortL
   { factor: 6, label: 'Ultra', shortLabel: '6×' },
 ];
 
-export function getStageLengthMetrics(factor: number) {
+/**
+ * Extra middenblokken vanaf stage 15. De latere stages mochten wat langer
+ * duren: +1 blok (~95 units) per 4 stages, tot maximaal 4 extra blokken en
+ * nooit meer dan 60% van de gekozen basislengte (korte stages blijven kort).
+ */
+export function getStageLengthBonusBlocks(stage: number, baseBlocks = 5): number {
+  const s = Math.max(1, Math.floor(stage));
+  if (s < 15) return 0;
+  const tiers = Math.floor((s - 15) / 4) + 1;
+  const cap = Math.min(4, Math.max(1, Math.ceil(baseBlocks * 0.6)));
+  return Math.min(tiers, cap);
+}
+
+export function getStageLengthMetrics(factor: number, stage = 1) {
   const clamped = Math.max(1, Math.min(6, Math.round(factor * 2) / 2));
-  const extraBlocks = Math.max(1, Math.round(1 + (clamped - 1) * 2.2));
+  const baseBlocks = Math.max(1, Math.round(1 + (clamped - 1) * 2.2));
+  const extraBlocks = baseBlocks + getStageLengthBonusBlocks(stage, baseBlocks);
   const units = 190 + extraBlocks * 95;
   const goldMult = 1 + (clamped - 1) * 0.34;
   const bossHpMult = 1 + (clamped - 1) * 0.28;
-  return { factor: clamped, extraBlocks, units, goldMult, bossHpMult };
+  return { factor: clamped, baseBlocks, extraBlocks, units, goldMult, bossHpMult };
 }
 
 export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
@@ -1014,7 +1028,7 @@ function appendMiddleBlock(
 }
 
 export function generateStageEvents(stage: number, settings: GameplaySettings): StageWaveEvent[] {
-  const lenCfg = getStageLengthMetrics(settings.stageLengthFactor);
+  const lenCfg = getStageLengthMetrics(settings.stageLengthFactor, stage);
 
   const baseScale = getStageCurve(stage, 1.24, 1.1);
   const hpScale = baseScale * settings.enemyHpMult;

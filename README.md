@@ -2,7 +2,7 @@
 
 Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-**Versie 1.2.2** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
+**Versie 1.2.3** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
 
 ## Functies
 
@@ -30,7 +30,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 
 ## Balans
 
-- **Lange stages**: standaard 3× lengte (~2 minuten per stage).
+- **Lange stages**: standaard 3× lengte (~2 minuten per stage). Vanaf **stage 15** komt er 1 extra middenblok bij per 4 stages (max. +4, en nooit meer dan 60% bovenop de gekozen lengte), zodat de latere stages blijven beklijven: stage 23 op de standaardlengte is zo'n 40% langer (in afstand) dan stage 14.
 - **Rustig tempo**: standaard 90% spelsnelheid.
 - **Paarse MAX-poortjes**: standaard 15% frequentie, waarvan 15% dubbel naast elkaar.
 - **Innovatieve situaties**: standaard 100% — veld-pickups, nieuwe vijandtypes, nieuwe poorten en doelwitlaser-scans. Op 0% speelt alles zoals v1.0.

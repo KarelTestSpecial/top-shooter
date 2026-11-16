@@ -157,7 +157,7 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
     onChange({ ...settings, [key]: value });
   };
 
-  const stageMetrics = getStageLengthMetrics(settings.stageLengthFactor);
+  const stageMetrics = getStageLengthMetrics(settings.stageLengthFactor, currentStage);
   const purpleDisabled = settings.purpleGateFreq <= 0;
   const stageStartRange = getPurpleGateRange(currentStage, 0.12, settings);
   const stageEndRange = getPurpleGateRange(currentStage, 0.92, settings);

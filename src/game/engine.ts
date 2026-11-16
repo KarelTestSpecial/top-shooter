@@ -265,7 +265,7 @@ export class GameEngine {
   startStage(stage: number, upgrades: UpgradeLevels, settings: GameplaySettings) {
     this.stage = stage;
     this.settings = settings;
-    this.stageLengthUnits = getStageLengthMetrics(settings.stageLengthFactor).units;
+    this.stageLengthUnits = getStageLengthMetrics(settings.stageLengthFactor, stage).units;
     this.speedMult = settings.gameSpeed;
     this.difficultyGoldMult = settings.goldMult;
     this.difficultyDmgMult = Math.sqrt(settings.enemyHpMult);
