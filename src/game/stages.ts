@@ -1471,6 +1471,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   };
 
   const bossGoldBonus = settings.bossMult > 1 ? 1 + (settings.bossMult - 1) * 0.35 : 1;
+  const bossHpBonus = bossKind === 'CARRIER' ? 1.4 : 1;
   events.push({
     atDistance: lenCfg.units - 2,
     type: 'BOSS',
@@ -1482,7 +1483,8 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
           getStageCurve(stage, 1.32, 1.12) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *
-          settings.bossMult,
+          settings.bossMult *
+          bossHpBonus
       ),
       goldReward: Math.round((150 + stage * 70) * lenCfg.goldMult * settings.goldMult * bossGoldBonus),
     },

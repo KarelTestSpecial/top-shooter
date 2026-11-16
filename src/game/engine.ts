@@ -783,8 +783,8 @@ export class GameEngine {
         vx:
           payload.kind === 'CARRIER'
             ? isMini
-              ? 0.16
-              : 0.2
+              ? 0.18
+              : 0.26
             : payload.kind === 'HELI'
               ? isMini
                 ? 0.28
@@ -796,7 +796,7 @@ export class GameEngine {
         maxHp: bossHp,
         flashTimer: 0,
         goldReward: payload.goldReward,
-        attackTimer: payload.kind === 'CARRIER' ? 1.7 : isMini ? 1.55 : 1.25,
+        attackTimer: payload.kind === 'CARRIER' ? 1.2 : isMini ? 1.55 : 1.25,
         patternStep: 0,
         rotorAngle: 0,
         telegraphLanes: [],
@@ -1995,7 +1995,7 @@ export class GameEngine {
         boss.z = Math.min(boss.targetZ, boss.z + 0.16 * dt);
       } else {
         const speedMult =
-          (enraged ? 1.45 : 1) * (boss.kind === 'HELI' ? 1.25 : boss.kind === 'CARRIER' ? 0.8 : 1);
+          (enraged ? 1.45 : 1) * (boss.kind === 'HELI' ? 1.25 : boss.kind === 'CARRIER' ? 1.05 : 1);
         boss.x += boss.vx * speedMult * dt;
         if (boss.x > 0.55) {
           boss.x = 0.55;
@@ -2026,15 +2026,23 @@ export class GameEngine {
           if (boss.attackTimer <= 0) {
             const bossTypeDmgMult = boss.isMiniBoss ? this.miniBossDmgMult : this.bossDmgMult;
             const paceMult = bossTypeDmgMult > 1 ? 1.15 : bossTypeDmgMult < 1 ? 0.88 : 1;
-            boss.attackTimer = Math.max(0.68, ((boss.isMiniBoss ? 1.65 : enraged ? 1.15 : 1.45) - this.stage * 0.07) / paceMult);
+            const baseInterval = boss.isMiniBoss ? 1.65 : enraged ? 1.15 : boss.kind === 'CARRIER' ? 1.3 : 1.45;
+            const minInterval = boss.kind === 'CARRIER' ? 0.56 : 0.68;
+            boss.attackTimer = Math.max(minInterval, (baseInterval - this.stage * 0.07) / paceMult);
             const primary = Math.max(-0.68, Math.min(0.68, this.playerX + (Math.random() - 0.5) * 0.18));
 
             if (boss.kind === 'CARRIER') {
               boss.patternStep = (boss.patternStep ?? 0) + 1;
+              const spread = BOSS_LANE_GAP;
               if (boss.patternStep % 2 === 0) {
+                // Bommenwerpers plus een spervuur op de flank: niet enkel een
+                // passieve golf die je doodschiet terwijl de baas stilstaat.
                 this.spawnCarrierBombers(boss);
+                boss.telegraphLanes = [
+                  Math.max(-0.72, primary - spread),
+                  Math.min(0.72, primary + spread),
+                ];
               } else {
-                const spread = BOSS_LANE_GAP;
                 boss.telegraphLanes = [
                   Math.max(-0.72, primary - spread),
                   primary,
@@ -2067,10 +2075,10 @@ export class GameEngine {
   }
 
   private spawnCarrierBombers(boss: BossEntity) {
-    const count = Math.max(3, Math.min(10, 3 + Math.floor(this.stage / 2)));
+    const count = Math.max(3, Math.min(12, 4 + Math.floor(this.stage / 2)));
     const hp = Math.max(
       2,
-      Math.round(6 * getStageCurve(this.stage, 1.28, 1.1) * this.difficultyDmgMult * this.squadThreatFactor()),
+      Math.round(8 * getStageCurve(this.stage, 1.28, 1.1) * this.difficultyDmgMult * this.squadThreatFactor()),
     );
     for (const sideX of [-0.4, 0, 0.4]) {
       const spriteCap = Math.min(10, count);
@@ -2088,7 +2096,7 @@ export class GameEngine {
         id: this.nextEntityId++,
         x: Math.max(-0.7, Math.min(0.7, sideX)),
         z: Math.min(0.9, boss.z + 0.12),
-        speed: 0.4,
+        speed: 0.48,
         count,
         maxCount: count,
         hpPerUnit: hp,

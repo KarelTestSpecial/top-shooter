@@ -2,7 +2,7 @@
 
 Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-reclames — zonder basisbeheer, energiebalken of wachttijden.
 
-**Versie 1.2.3** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
+**Versie 1.2.4** · [Releases](https://github.com/KarelTestSpecial/top-shooter/releases)
 
 ## Functies
 
@@ -37,6 +37,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Vijand-druk**: standaard 130% HP en 115% horde-dichtheid, max. 120 vijanden per golf.
 - **Vlakke power-curve**: squad-schade groeit als `squad^0.6`; vijanden schalen zacht mee met je squad.
 - **Geleidelijke moeilijkheid**: vijanden worden per stage licht talrijker en taaier. Vanaf **stage 11** vlakt die groei af (HP ×1.10, aantal ×1.08 per stage) en groeit je eigen vuurkracht mee (×1.15 per stage), zodat stage 11 geen plotselinge muur is. Stages 1–10 zijn ongewijzigd.
+- **Vliegdekschip-baas**: de CARRIER (stages 4, 8, 12, …) heeft **40% meer HP** dan de andere eindbazen, schuift sneller heen en weer en combineert zijn bommenwerpergolven met een spervuur, zodat hij niet meer als een zittend doelwit weggeklikt kan worden.
 - **Drie voorinstellingen**: *Standaard Arcade* (90% tempo, lange stages), *Snelle Chaos* (140% tempo, 175% HP) en *Oppermacht Sandbox* (plasmakanon, ∞ soldaten, 5 drones).
 - **Instelbaar**: tempo, stage-lengte, vijand-HP, horde-dichtheid, leger-limiet, goud-bonus, mini- en eindbazen, start-schild/-drones, startwapen, arena/biome, paarse MAX-poortjes (frequentie, dubbel/enkel, min/max-hoogte) en de frequentie van innovatieve situaties.
 
