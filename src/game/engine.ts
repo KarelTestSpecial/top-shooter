@@ -770,7 +770,10 @@ export class GameEngine {
       const payload = ev.payload as { kind: BossEntity['kind']; name: string; hp: number; goldReward: number };
       if (!isMini) this.bossSpawned = true;
       const bossHp = Math.round(
-        payload.hp * (isMini ? this.squadThreatFactor(0.3, 1.25) : this.squadThreatFactor(0.4, 1.6)),
+        payload.hp *
+          (isMini
+            ? this.squadThreatFactor(0.3, 1.25)
+            : this.squadThreatFactor(0.4, 1.6) * this.bossBuildFactor()),
       );
       this.boss = {
         id: this.nextEntityId++,
@@ -1611,6 +1614,26 @@ export class GameEngine {
   private squadThreatFactor(exponent = 0.5, cap = 4.2): number {
     const ratio = Math.max(1, this.squadCount) / 6;
     return Math.min(cap, Math.max(1, Math.pow(ratio, exponent)));
+  }
+
+  /**
+   * Eindbazen schaalden enkel mee met de squad-grootte, niet met het wapen.
+   * Wie met een ROCKET/LASER en volop upgrades aankwam, sloeg de baas in
+   * enkele seconden plat. Deze factor (sqrt, want een baas mag geen
+   * kogelspons worden) compenseert het wapen, de vuurkracht/Vuursnelheid-
+   * upgrades en tijdelijke poort-buffs op het moment van spawnen.
+   */
+  private bossBuildFactor(): number {
+    const tierBase: Record<WeaponTier, number> = {
+      RIFLE: 1,
+      DOUBLE: 1.15,
+      SPREAD: 1.3,
+      ROCKET: 1.6,
+      LASER: 1.75,
+    };
+    const upgradeMult = getFirepowerMultiplier(this.upgrades) * getFireRateMultiplier(this.upgrades);
+    const tempMult = Math.max(1, this.tempDamageBonus * this.tempFireRateBonus);
+    return Math.min(3, Math.pow(tierBase[this.weaponTier] * upgradeMult * tempMult, 0.4));
   }
 
   private clampSquad(value: number): number {

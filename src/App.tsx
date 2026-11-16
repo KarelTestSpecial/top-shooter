@@ -51,6 +51,13 @@ function clampNum(val: unknown, min: number, max: number, fallback: number): num
   return Math.max(min, Math.min(max, val));
 }
 
+/** Compacte HP-notatie: 1282430 -> 1,28M, 24500 -> 25k. */
+function fmtHp(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2).replace('.', ',')}M`;
+  if (value >= 10_000) return `${Math.round(value / 1000)}k`;
+  return `${value}`;
+}
+
 function coerceUpgradeSplit(raw: Partial<UpgradeLevels> | undefined): UpgradeLevels {
   return {
     startSquad: clampNum(raw?.startSquad, 0, 100, DEFAULT_UPGRADE_WEIGHTS.startSquad),
@@ -1001,7 +1008,7 @@ export default function App() {
                   {hud.bossEnraged ? ' · Woede-Fase' : ''}
                 </span>
                 <span className="font-mono-num text-slate-200">
-                  {hud.bossHp} / {hud.bossMaxHp} HP
+                  {fmtHp(hud.bossHp)} / {fmtHp(hud.bossMaxHp)} HP
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
