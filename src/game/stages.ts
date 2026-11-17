@@ -1506,8 +1506,8 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       kind: bossKind,
       name: bossNames[bossKind],
       hp: Math.round(
-        2100 *
-          getStageCurve(stage, 1.34, 1.16) *
+        1650 *
+          getStageCurve(stage, 1.33, 1.14) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *
           settings.bossMult *
