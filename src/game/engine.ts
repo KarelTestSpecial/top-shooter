@@ -773,7 +773,7 @@ export class GameEngine {
       const bossHp = Math.round(
         payload.hp *
           (isMini
-            ? this.squadThreatFactor(0.34, 1.6) * this.miniBuildFactor()
+            ? this.squadThreatFactor(0.36, 1.75) * this.miniBuildFactor()
             : this.squadThreatFactor(0.44, 2.6) * this.bossBuildFactor()),
       );
       this.boss = {
@@ -1627,10 +1627,10 @@ export class GameEngine {
   private miniBuildFactor(): number {
     const tierMult: Record<WeaponTier, number> = {
       RIFLE: 1,
-      SPREAD: 1.08,
-      DOUBLE: 1.12,
-      ROCKET: 1.22,
-      LASER: 1.32,
+      SPREAD: 1.1,
+      DOUBLE: 1.16,
+      ROCKET: 1.28,
+      LASER: 1.4,
     };
     return tierMult[this.weaponTier];
   }
