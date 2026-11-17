@@ -773,7 +773,7 @@ export class GameEngine {
       const bossHp = Math.round(
         payload.hp *
           (isMini
-            ? this.squadThreatFactor(0.3, 1.25)
+            ? this.squadThreatFactor(0.32, 1.45)
             : this.squadThreatFactor(0.44, 2.6) * this.bossBuildFactor()),
       );
       this.boss = {
