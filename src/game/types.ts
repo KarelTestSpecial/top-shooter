@@ -19,7 +19,7 @@ export interface GameplaySettings {
   purpleGateMin: number; // 50 .. 1000
   purpleGateMax: number; // 100 .. 1250
   miniBossMult: number; // 0.4 .. 4.0 (step 0.2)
-  bossMult: number; // 0.4 .. 4.0 (step 0.2)
+  bossMult: number; // 0.4 .. 3.6 (step 0.2), 2.0 = midden & standaard
   specialSituations: number; // 0 .. 100 (%) — frequentie van veld-pickups, nieuwe vijanden, poorten en omgevingshazards
 }
 

@@ -3,6 +3,9 @@ import { ChevronDown, ChevronUp, RotateCcw, X } from 'lucide-react';
 import { WEAPON_LABELS } from '../game/engine';
 import {
   ABSOLUTE_MAX_CAP,
+  BOSS_MULT_MAX,
+  BOSS_MULT_MIN,
+  BOSS_MULT_STEP,
   DEFAULT_GAMEPLAY_SETTINGS,
   GAME_SPEED_MAX,
   GAME_SPEED_MIN,
@@ -30,7 +33,7 @@ const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> 
   },
   {
     label: 'Snelle Chaos',
-    desc: '175% tempo · 175% HP · 2,2× Bazen',
+    desc: '175% tempo · 175% HP · 2,6× Bazen',
     values: {
       stageLengthFactor: 0.2,
       gameSpeed: 1.75,
@@ -48,7 +51,7 @@ const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> 
       purpleGateMin: 125,
       purpleGateMax: 750,
       miniBossMult: 2.0,
-      bossMult: 2.2,
+      bossMult: 2.6,
       specialSituations: 100,
     },
   },
@@ -325,9 +328,9 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
                   label="Eindbazen sterkte"
                   valueText={`${fmtFactor(settings.bossMult)}× HP`}
                   value={settings.bossMult}
-                  min={0.4}
-                  max={4.0}
-                  step={0.2}
+                  min={BOSS_MULT_MIN}
+                  max={BOSS_MULT_MAX}
+                  step={BOSS_MULT_STEP}
                   accentClass="accent-rose-500"
                   valueColorClass="text-rose-300"
                   onChange={(v) => update('bossMult', v)}

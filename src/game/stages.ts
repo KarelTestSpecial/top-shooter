@@ -32,6 +32,10 @@ export const STAGE_LENGTH_MAX = 1.8;
 export const STAGE_LENGTH_STEP = 0.1;
 export const STAGE_LENGTH_BASE_BLOCKS = 12; // 1.0× = 12 middenblokken (vroegere 6.0×)
 
+export const BOSS_MULT_MIN = 0.4;
+export const BOSS_MULT_MAX = 3.6;
+export const BOSS_MULT_STEP = 0.2; // (0.4 + 3.6) / 2 = 2.0 (midden & standaard)
+
 export const STAGE_LENGTH_PRESETS: Array<{ factor: number; label: string; shortLabel: string }> = [
   { factor: 0.4, label: 'Kort', shortLabel: '0,4×' },
   { factor: 1.0, label: 'Standaard', shortLabel: '1,0×' },
@@ -84,7 +88,7 @@ export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   purpleGateMin: 60,
   purpleGateMax: 250,
   miniBossMult: 1.6,
-  bossMult: 1.5,
+  bossMult: 2.0,
   specialSituations: 100,
 };
 
@@ -1502,8 +1506,8 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
       kind: bossKind,
       name: bossNames[bossKind],
       hp: Math.round(
-        1400 *
-          getStageCurve(stage, 1.32, 1.12) *
+        2100 *
+          getStageCurve(stage, 1.34, 1.16) *
           lenCfg.bossHpMult *
           settings.enemyHpMult *
           settings.bossMult *

@@ -7,6 +7,8 @@ import { GameEngine, WEAPON_LABELS } from './game/engine';
 import { sound } from './game/sound';
 import {
   ABSOLUTE_MAX_CAP,
+  BOSS_MULT_MAX,
+  BOSS_MULT_MIN,
   DEFAULT_GAMEPLAY_SETTINGS,
   DEFAULT_UPGRADE_WEIGHTS,
   GAME_SPEED_CALIBRATION,
@@ -216,9 +218,9 @@ function loadProgress(): PersistentProgress {
 
     let bossMult =
       typeof saved.bossMult === 'number'
-        ? clampNum(saved.bossMult, 0.4, 4.0, DEFAULT_GAMEPLAY_SETTINGS.bossMult)
+        ? clampNum(saved.bossMult, BOSS_MULT_MIN, BOSS_MULT_MAX, DEFAULT_GAMEPLAY_SETTINGS.bossMult)
         : typeof saved.bossStrength === 'string' && saved.bossStrength in legacyBossMap
-          ? legacyBossMap[saved.bossStrength]
+          ? clampNum(legacyBossMap[saved.bossStrength], BOSS_MULT_MIN, BOSS_MULT_MAX, DEFAULT_GAMEPLAY_SETTINGS.bossMult)
           : DEFAULT_GAMEPLAY_SETTINGS.bossMult;
 
     const specialSituations = clampNum(
@@ -385,6 +387,12 @@ function coerceSlotProgress(raw: unknown): PersistentProgress | null {
     settings: {
       ...DEFAULT_GAMEPLAY_SETTINGS,
       ...saved,
+      bossMult: clampNum(
+        saved.bossMult,
+        BOSS_MULT_MIN,
+        BOSS_MULT_MAX,
+        DEFAULT_GAMEPLAY_SETTINGS.bossMult,
+      ),
       gameSpeed: slotGameSpeed,
       stageLengthFactor: slotStageLengthFactor,
     },

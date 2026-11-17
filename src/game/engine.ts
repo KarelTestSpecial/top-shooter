@@ -774,7 +774,7 @@ export class GameEngine {
         payload.hp *
           (isMini
             ? this.squadThreatFactor(0.3, 1.25)
-            : this.squadThreatFactor(0.4, 1.6) * this.bossBuildFactor()),
+            : this.squadThreatFactor(0.5, 4.2) * this.bossBuildFactor()),
       );
       this.boss = {
         id: this.nextEntityId++,
@@ -1627,14 +1627,15 @@ export class GameEngine {
   private bossBuildFactor(): number {
     const tierBase: Record<WeaponTier, number> = {
       RIFLE: 1,
-      DOUBLE: 1.15,
-      SPREAD: 1.3,
-      ROCKET: 1.6,
-      LASER: 1.75,
+      DOUBLE: 1.45,
+      SPREAD: 1.25,
+      ROCKET: 2.1,
+      LASER: 2.8,
     };
     const upgradeMult = getFirepowerMultiplier(this.upgrades) * getFireRateMultiplier(this.upgrades);
     const tempMult = Math.max(1, this.tempDamageBonus * this.tempFireRateBonus);
-    return Math.min(3, Math.pow(tierBase[this.weaponTier] * upgradeMult * tempMult, 0.4));
+    const droneMult = 1 + this.drones.length * 0.08;
+    return Math.min(5.5, Math.pow(tierBase[this.weaponTier] * upgradeMult * tempMult * droneMult, 0.52));
   }
 
   private clampSquad(value: number): number {
