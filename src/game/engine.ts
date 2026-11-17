@@ -773,7 +773,7 @@ export class GameEngine {
       const bossHp = Math.round(
         payload.hp *
           (isMini
-            ? this.squadThreatFactor(0.32, 1.45)
+            ? this.squadThreatFactor(0.34, 1.6) * this.miniBuildFactor()
             : this.squadThreatFactor(0.44, 2.6) * this.bossBuildFactor()),
       );
       this.boss = {
@@ -1624,13 +1624,24 @@ export class GameEngine {
    * kogelspons worden) compenseert het wapen, de vuurkracht/Vuursnelheid-
    * upgrades en tijdelijke poort-buffs op het moment van spawnen.
    */
+  private miniBuildFactor(): number {
+    const tierMult: Record<WeaponTier, number> = {
+      RIFLE: 1,
+      SPREAD: 1.08,
+      DOUBLE: 1.12,
+      ROCKET: 1.22,
+      LASER: 1.32,
+    };
+    return tierMult[this.weaponTier];
+  }
+
   private bossBuildFactor(): number {
     const tierBase: Record<WeaponTier, number> = {
-      RIFLE: 1,
-      DOUBLE: 1.3,
-      SPREAD: 1.2,
-      ROCKET: 1.8,
-      LASER: 2.2,
+      RIFLE: 0.92,
+      SPREAD: 1.15,
+      DOUBLE: 1.32,
+      ROCKET: 1.85,
+      LASER: 2.35,
     };
     const upgradeMult = getFirepowerMultiplier(this.upgrades) * getFireRateMultiplier(this.upgrades);
     const tempMult = Math.max(1, this.tempDamageBonus * this.tempFireRateBonus);
