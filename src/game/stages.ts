@@ -1041,8 +1041,8 @@ function appendMiddleBlock(
       kind: miniKind,
       name: `Sector-Commandant ${stage}.${blockIndex + 1}`,
       hp: Math.round(
-        710 *
-          getStageCurve(stage, 1.3, 1.1) *
+        780 *
+          getStageCurve(stage, 1.31, 1.12) *
           (1 + (blockIndex <= 12 ? blockIndex * 0.25 : 12 * 0.25 + (blockIndex - 12) * 0.11)) *
           settings.enemyHpMult *
           settings.miniBossMult,
@@ -1281,7 +1281,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     payload: {
       kind: miniBossKind,
       name: `Voorhoede-Kapitein ${stage}`,
-      hp: Math.round(620 * getStageCurve(stage, 1.3, 1.1) * settings.enemyHpMult * settings.miniBossMult),
+      hp: Math.round(680 * getStageCurve(stage, 1.31, 1.12) * settings.enemyHpMult * settings.miniBossMult),
       goldReward: Math.round((65 + stage * 28) * settings.goldMult * miniGoldBonus),
     },
   });
