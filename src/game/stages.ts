@@ -453,6 +453,12 @@ function specialEnabled(stage: number, seed: number, settings: GameplaySettings)
   return chance > 0 && specialRoll(stage, seed) < chance;
 }
 
+function shouldSpawnWeaponDownCrate(stage: number, settings: GameplaySettings): boolean {
+  if (stage < 2) return false;
+  const chance = specialChance(settings) * 0.45;
+  return chance > 0 && Math.random() < chance;
+}
+
 /**
  * Nieuwe vijandtypes: JUMPER (springt over kogels), MEDIC (geneest nabije
  * golven), MORTAR (telegrafeert artillerie) en SHIELD_UNIT (energieschild).
@@ -592,7 +598,6 @@ function appendMiddleBlock(
   const dmgBase = Math.max(2, Math.round((6 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
   const weaponChoices: WeaponTier[] = ['SPREAD', 'ROCKET', 'LASER'];
   const crateWeapon = weaponChoices[(stage + blockIndex) % weaponChoices.length];
-  const canSabotage = stage >= 2 && specialChance(settings) > 0;
 
   if (pattern === 0) {
     // Pattern 0: Hinderlaag, Bombers & Vaten-Keten
@@ -949,10 +954,10 @@ function appendMiddleBlock(
       atDistance: offset + 14,
       type: 'BARRELS',
       payload: [
-        { x: -0.58, hp: Math.round(56 * s), kind: 'WOOD', goldAmount: 32 },
+        { x: -0.58, hp: Math.round(56 * s), kind: shouldSpawnWeaponDownCrate(stage, settings) ? 'WEAPON_DOWN_CRATE' : 'DRONE_CRATE' },
         { x: -0.2, hp: Math.round(56 * s), kind: 'SQUAD_CRATE', squadBonus: 8 + stage * 2 },
         { x: 0.2, hp: Math.round(64 * s), kind: 'TESLA_CRATE' },
-        { x: 0.58, hp: Math.round(56 * s), kind: canSabotage && blockIndex % 2 === 0 ? 'WEAPON_DOWN_CRATE' : 'DRONE_CRATE' },
+        { x: 0.58, hp: Math.round(56 * s), kind: 'WOOD', goldAmount: 32 },
       ] satisfies BarrelSpec[],
     });
 
@@ -1059,9 +1064,9 @@ function appendMiddleBlock(
       atDistance: offset + 35,
       type: 'BARRELS',
       payload: [
-        { x: flip ? -0.56 : 0.56, hp: Math.round(54 * s), kind: canSabotage ? 'WEAPON_DOWN_CRATE' : 'STEEL', goldAmount: 36 },
+        { x: -0.56, hp: Math.round(54 * s), kind: shouldSpawnWeaponDownCrate(stage, settings) ? 'WEAPON_DOWN_CRATE' : 'STEEL', goldAmount: 36 },
         { x: 0.0, hp: Math.round(64 * s), kind: 'WEAPON_CRATE', weaponTier: crateWeapon },
-        { x: flip ? 0.56 : -0.56, hp: Math.round(54 * s), kind: 'SHIELD_CRATE' },
+        { x: 0.56, hp: Math.round(54 * s), kind: 'SHIELD_CRATE' },
       ] satisfies BarrelSpec[],
     });
 
@@ -1156,7 +1161,7 @@ function appendMiddleBlock(
         { x: -0.56, hp: Math.round(60 * s), kind: 'CRYO_CRATE' },
         { x: -0.18, hp: Math.round(62 * s), kind: 'GOLD_SAFE' },
         { x: 0.18, hp: Math.round(66 * s), kind: 'HYPER_CRATE' },
-        { x: 0.56, hp: Math.round(52 * s), kind: canSabotage ? 'WEAPON_DOWN_CRATE' : 'SQUAD_CRATE', squadBonus: 7 + stage * 2 },
+        { x: 0.56, hp: Math.round(52 * s), kind: shouldSpawnWeaponDownCrate(stage, settings) ? 'WEAPON_DOWN_CRATE' : 'SQUAD_CRATE', squadBonus: 7 + stage * 2 },
       ] satisfies BarrelSpec[],
     });
 
@@ -1258,10 +1263,11 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   const variant = stage % 3;
   const slotCounter = { next: 0, lastPurpleAt: -100 };
 
-  // === ACT 1: OPENING & ESCALATION (0 -> 94), wisselende volgorde vanaf stage 2 ===
-  const openingGateDist = stage >= 2 && variant === 1 ? 18 : stage >= 2 && variant === 2 ? 23 : 4;
-  const openingBarrelsDist = stage >= 2 && variant === 1 ? 26 : stage >= 2 && variant === 2 ? 7 : 12;
-  const openingEnemiesDist = stage >= 2 && variant === 1 ? 6 : stage >= 2 && variant === 2 ? 15 : 21;
+  // === ACT 1: OPENING & ESCALATION (0 -> 94), wisselende volgorde en zwaardere eerste 2 groepen alleen vanaf stage 18+ ===
+  const openingVariant = stage >= 18 ? variant : 0;
+  const openingGateDist = openingVariant === 1 ? 18 : openingVariant === 2 ? 23 : 4;
+  const openingBarrelsDist = openingVariant === 1 ? 26 : openingVariant === 2 ? 7 : 12;
+  const openingEnemiesDist = openingVariant === 1 ? 6 : openingVariant === 2 ? 15 : 21;
 
   events.push({
     atDistance: openingGateDist,
@@ -1291,7 +1297,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     atDistance: openingEnemiesDist,
     type: 'ENEMIES',
     payload:
-      variant === 0
+      openingVariant === 0
         ? [
             {
               x: -0.45,
@@ -1306,7 +1312,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
               kind: 'RAIDER',
             },
           ]
-        : variant === 1
+        : openingVariant === 1
           ? [
               {
                 x: -0.25,
@@ -1525,7 +1531,6 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   const finalBarrierDmg = Math.max(2, Math.round((7 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
 
   const finalVariant = stage >= 2 ? (stage + extraMiddleBlocks) % 2 : 0;
-  const finalCanSabotage = stage >= 2 && specialChance(settings) > 0;
 
   events.push({
     atDistance: finalOffset + (finalVariant === 1 ? 30 : 4),
@@ -1533,7 +1538,11 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
     payload: [
       { x: -0.52, hp: Math.round(56 * finalScale), kind: 'SQUAD_CRATE', squadBonus: 8 + stage * 2 },
       { x: 0.0, hp: Math.round(80 * finalScale), kind: 'WEAPON_CRATE', weaponTier: 'ROCKET' },
-      { x: 0.52, hp: Math.round(58 * finalScale), kind: finalVariant === 1 && finalCanSabotage ? 'WEAPON_DOWN_CRATE' : 'SHIELD_CRATE' },
+      {
+        x: 0.52,
+        hp: Math.round(58 * finalScale),
+        kind: finalVariant === 1 && shouldSpawnWeaponDownCrate(stage, settings) ? 'WEAPON_DOWN_CRATE' : 'SHIELD_CRATE',
+      },
     ] satisfies BarrelSpec[],
   });
 

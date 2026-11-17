@@ -59,12 +59,11 @@ interface BiomeTheme {
 
 /**
  * Afstand tussen twee baas-lanes, in genormaliseerde X-eenheden.
- * De treffer-test is |kogel.x - playerX| < hazard-radius + speler-half,
- * dus de ruimte tussen twee kogels moet > 2 × (0.13 + 0.10) = 0.46 zijn,
- * anders is het midden technisch onbereikbaar en word je altijd geraakt.
- * 0.55 geeft ±0.045 speelruimte om er tussen te staan.
+ * De treffer-test combineert de werkelijke visuele breedte van de squad met de
+ * visuele kogelradius, zodat raken op het scherm exact overeenkomt met de hitbox
+ * terwijl er bij 0.66 afstand ook met een volle groep ruimte tussen twee kogels blijft.
  */
-const BOSS_LANE_GAP = 0.55;
+const BOSS_LANE_GAP = 0.66;
 
 const BIOMES: BiomeTheme[] = [
   {
@@ -802,7 +801,16 @@ export class GameEngine {
         maxHp: bossHp,
         flashTimer: 0,
         goldReward: payload.goldReward,
-        attackTimer: payload.kind === 'CARRIER' ? 1.2 : isMini ? 0.25 : 1.25,
+        attackTimer:
+          payload.kind === 'CARRIER'
+            ? 1.2
+            : isMini
+              ? this.stage >= 8
+                ? 0.35
+                : this.stage >= 5
+                  ? 0.65
+                  : 1.0
+              : 1.25,
         patternStep: 0,
         rotorAngle: 0,
         telegraphLanes: [],
@@ -1449,7 +1457,7 @@ export class GameEngine {
               z: defeated.z + 0.04,
               speed: 0.62,
               damage: shrapnelDmg,
-              radius: 0.11,
+              radius: 0.1,
             });
           }
           this.mortarStrikes.push({
@@ -1700,10 +1708,10 @@ export class GameEngine {
       SPREAD: 1.14,
       DOUBLE: 1.22,
       ROCKET: 1.38,
-      LASER: 1.55,
+      LASER: 2.35,
     };
     const upgradeMult = getFirepowerMultiplier(this.upgrades) * getFireRateMultiplier(this.upgrades);
-    return Math.min(2.3, tierMult[this.weaponTier] * Math.pow(upgradeMult, 0.2));
+    return Math.min(3.2, tierMult[this.weaponTier] * Math.pow(upgradeMult, 0.2));
   }
 
   private bossBuildFactor(): number {
@@ -1891,7 +1899,7 @@ export class GameEngine {
               }
             }
           }
-          if (this.stage >= 3 && g.z <= 0.52) {
+          if (this.stage >= 6 && g.z <= 0.52) {
             g.x = Math.max(-0.76, Math.min(0.76, g.x + Math.sin(this.elapsedTime * 2.6 + g.id) * 0.2 * dt));
           } else if (g.z > 0.52) {
             g.x += (this.playerX - g.x) * Math.min(1, dt * 1.0);
@@ -2017,7 +2025,7 @@ export class GameEngine {
             g.x += (this.playerX - g.x) * Math.min(1, dt * 1.7);
           }
           g.x = Math.max(-0.76, Math.min(0.76, g.x));
-        } else if (g.kind === 'BRUTE' && this.stage >= 3) {
+        } else if (g.kind === 'BRUTE' && this.stage >= 6) {
           if (g.z > 0.55) {
             g.x += (this.playerX - g.x) * Math.min(1, dt * 0.85);
           } else {
@@ -2115,7 +2123,13 @@ export class GameEngine {
 
     if (this.freezeTimer <= 0) {
       if (boss.z < boss.targetZ) {
-        const entrySpeed = boss.isMiniBoss ? 0.28 : 0.16;
+        const entrySpeed = boss.isMiniBoss
+          ? this.stage >= 8
+            ? 0.27
+            : this.stage >= 5
+              ? 0.23
+              : 0.19
+          : 0.16;
         boss.z = Math.min(boss.targetZ, boss.z + entrySpeed * dt);
       } else {
         const speedMult =
@@ -2130,9 +2144,10 @@ export class GameEngine {
         }
       }
 
-      // Mini-bazen beginnen al kort vóór aankomst op targetZ met hun eerste schot
-      // zodat ze niet vrijwel altijd verslagen zijn nog voor ze een projectiel afvuren.
-      const readyToAttack = boss.isMiniBoss ? boss.z >= boss.targetZ * 0.6 : boss.z >= boss.targetZ;
+      // Op lagere stages wacht de mini-baas vrijwel tot targetZ; in hogere levels begint hij eerder.
+      const readyToAttack = boss.isMiniBoss
+        ? boss.z >= boss.targetZ * (this.stage >= 8 ? 0.62 : this.stage >= 5 ? 0.78 : 0.92)
+        : boss.z >= boss.targetZ;
       if (readyToAttack) {
         if (boss.telegraphLanes.length > 0) {
           boss.telegraphTimer -= dt * this.speedMult;
@@ -2145,7 +2160,7 @@ export class GameEngine {
                 z: boss.z + 0.05,
                 speed: enraged ? 0.56 : 0.49,
                 damage: Math.max(1, Math.round(((boss.isMiniBoss ? 2 : 3) + this.stage) * this.difficultyDmgMult * bossTypeDmgMult)),
-                radius: 0.13,
+                radius: 0.1,
               });
             }
             boss.telegraphLanes = [];
@@ -2162,30 +2177,20 @@ export class GameEngine {
 
             if (boss.kind === 'CARRIER') {
               boss.patternStep = (boss.patternStep ?? 0) + 1;
-              const spread = BOSS_LANE_GAP;
               if (boss.patternStep % 2 === 0) {
                 this.spawnCarrierBombers(boss);
-                boss.telegraphLanes = [
-                  Math.max(-0.72, primary - spread),
-                  Math.min(0.72, primary + spread),
-                ];
+                const pairMid = Math.max(-0.38, Math.min(0.38, primary));
+                boss.telegraphLanes = [pairMid - 0.34, pairMid + 0.34];
               } else {
-                boss.telegraphLanes = [
-                  Math.max(-0.72, primary - spread),
-                  primary,
-                  Math.min(0.72, primary + spread),
-                ];
+                const trioMid = Math.max(-0.1, Math.min(0.1, primary));
+                boss.telegraphLanes = [trioMid - BOSS_LANE_GAP, trioMid, trioMid + BOSS_LANE_GAP];
               }
             } else if (enraged) {
-              const leftLane = Math.max(-0.72, primary - BOSS_LANE_GAP);
-              const rightLane = Math.min(0.72, primary + BOSS_LANE_GAP);
-              boss.telegraphLanes =
-                boss.kind === 'TANK'
-                  ? [-0.52, primary, 0.52]
-                  : [leftLane, primary, rightLane];
+              const trioMid = Math.max(-0.1, Math.min(0.1, primary));
+              boss.telegraphLanes = [trioMid - BOSS_LANE_GAP, trioMid, trioMid + BOSS_LANE_GAP];
             } else if (!boss.isMiniBoss || boss.kind === 'TANK') {
               const offset = primary > 0 ? -BOSS_LANE_GAP : BOSS_LANE_GAP;
-              boss.telegraphLanes = [primary, Math.max(-0.7, Math.min(0.7, primary + offset))];
+              boss.telegraphLanes = [primary, Math.max(-0.74, Math.min(0.74, primary + offset))];
             } else {
               boss.telegraphLanes = [primary];
             }
@@ -2238,11 +2243,22 @@ export class GameEngine {
     sound.playBossAlert();
   }
 
+  private getSquadVisualHalfWidth(): number {
+    const maxDrawn = Math.min(48, Math.max(1, Math.ceil(this.squadCount)));
+    const cols = Math.min(9, Math.max(1, Math.ceil(Math.sqrt(maxDrawn * 1.8))));
+    return ((cols - 1) / 2) * 0.036 + 0.014;
+  }
+
   private updateHazards(dt: number) {
+    const squadHalfW = this.getSquadVisualHalfWidth();
+    const pRef = this.project(0, 0.94);
+    const visualBulletR = (13 * pRef.scale) / Math.max(120, pRef.halfW);
+
     for (let i = this.hazards.length - 1; i >= 0; i--) {
       const h = this.hazards[i];
       h.z += h.speed * this.speedMult * dt;
-      if (h.z >= 0.9 && h.z <= 0.99 && Math.abs(h.x - this.playerX) < h.radius + 0.1) {
+      const hitRadius = Math.max(visualBulletR, h.radius * 0.65) + squadHalfW;
+      if (h.z >= 0.905 && h.z <= 0.99 && Math.abs(h.x - this.playerX) < hitRadius) {
         this.hazards.splice(i, 1);
         this.absorbOrDamageSquad(h.damage, `-${h.damage} Treffer`, true);
         continue;
@@ -2696,7 +2712,7 @@ export class GameEngine {
     if (this.boss && this.boss.telegraphLanes.length > 0) {
       const pulse = 0.24 + 0.16 * Math.sin(this.elapsedTime * 24);
       ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
-      ctx.lineWidth = 28;
+      ctx.lineWidth = 20;
       for (const laneX of this.boss.telegraphLanes) {
         const warnTop = this.project(laneX, this.boss.z);
         const warnBot = this.project(laneX, 1.02);
@@ -3640,7 +3656,7 @@ export class GameEngine {
 
   private drawPlayerSquad() {
     const ctx = this.ctx;
-    const maxDrawn = Math.min(48, this.squadCount);
+    const maxDrawn = Math.min(48, Math.max(1, Math.ceil(this.squadCount)));
     const cols = Math.min(9, Math.max(1, Math.ceil(Math.sqrt(maxDrawn * 1.8))));
 
     const center = this.project(this.playerX, 0.94);
@@ -3655,7 +3671,7 @@ export class GameEngine {
       const row = Math.floor(i / cols);
       const rowCount = row === Math.floor((maxDrawn - 1) / cols) ? ((maxDrawn - 1) % cols) + 1 : cols;
       const col = i % cols;
-      const offsetX = (col - (rowCount - 1) / 2) * 0.042;
+      const offsetX = (col - (rowCount - 1) / 2) * 0.036;
       const offsetZ = row * 0.018;
       const p = this.project(this.playerX + offsetX, 0.94 + offsetZ);
       const r = 8.5 * p.scale;
