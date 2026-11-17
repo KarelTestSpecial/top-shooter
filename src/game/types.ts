@@ -3,8 +3,8 @@ export type GameState = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'G
 export type BiomeChoice = 'AUTO' | 'COAST' | 'DESERT' | 'REACTOR';
 
 export interface GameplaySettings {
-  stageLengthFactor: number; // 1.0 .. 6.0 (step 0.5)
-  gameSpeed: number; // 0.6 .. 1.5 (step 0.05)
+  stageLengthFactor: number; // 0.2 .. 1.8 (step 0.1), 1.0 = nieuwe standaard (12 blokken, 6.0× legacy)
+  gameSpeed: number; // 0.6 .. 2.0 (step 0.05), 1.0 = herijkt basistempo (0.8× legacy)
   enemyHpMult: number; // 0.5 .. 2.5 (step 0.1)
   enemyCountMult: number; // 0.5 .. 2.5 (step 0.1)
   enemyMaxGroupSize: number; // 15 .. 250 (step 5)

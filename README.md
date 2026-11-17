@@ -30,8 +30,8 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 
 ## Balans
 
-- **Lange stages**: standaard 3× lengte (~2 minuten per stage). Vanaf **stage 15** komt er 1 extra middenblok bij per 4 stages (max. +4, en nooit meer dan 60% bovenop de gekozen lengte), zodat de latere stages blijven beklijven: stage 23 op de standaardlengte is zo'n 40% langer (in afstand) dan stage 14.
-- **Rustig tempo**: standaard 90% spelsnelheid.
+- **Lange stages**: standaard **1,0×** (12 middenblokken, 1330u op stage 1; instelbaar van 0,2× kort tot 1,8× extra lang). Vanaf **stage 15** komt er 1 extra middenblok bij per 4 stages (max. +4, en nooit meer dan 60% bovenop de gekozen lengte), zodat de latere stages blijven beklijven: stage 15 op de standaardlengte telt 1425u en stage 27+ telt 1710u.
+- **Rustig tempo**: standaard 100% spelsnelheid (herijkt vanaf de vroegere 80%-snelheid).
 - **Paarse MAX-poortjes**: standaard 15% frequentie, waarvan 15% dubbel naast elkaar.
 - **Innovatieve situaties**: standaard 100% — veld-pickups, nieuwe vijandtypes, nieuwe poorten en doelwitlaser-scans. Op 0% speelt alles zoals v1.0.
 - **Vijand-druk**: standaard 130% HP en 115% horde-dichtheid, max. 120 vijanden per golf.
@@ -39,7 +39,7 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
 - **Geleidelijke moeilijkheid**: vijanden worden per stage licht talrijker en taaier. Vanaf **stage 11** vlakt die groei af (HP ×1.10, aantal ×1.08 per stage) en groeit je eigen vuurkracht mee (×1.15 per stage), zodat stage 11 geen plotselinge muur is. Stages 1–10 zijn ongewijzigd.
 - **Eindbazen schalen mee met je vuurkracht**: bij het spawnen krijgt een eindbaas HP op basis van je wapen-tier (RIFLE 1,0 → LASER 1,75), je vuurkracht- en vuursnelheid-upgrades en eventuele tijdelijke poort-buffs (geometrie `^0,4`, max ×3). Wie met een Raketwerper/Plasmakanon en volop upgrades aankomt, krijgt een taaie baas in plaats van eentje die in enkele seconden wegsmelt.
 - **Vliegdekschip-baas**: de CARRIER (stages 4, 8, 12, …) heeft **40% meer HP** dan de andere eindbazen, schuift sneller heen en weer en combineert zijn bommenwerpergolven met een spervuur, zodat hij niet meer als een zittend doelwit weggeklikt kan worden.
-- **Drie voorinstellingen**: *Standaard Arcade* (90% tempo, lange stages), *Snelle Chaos* (140% tempo, 175% HP) en *Oppermacht Sandbox* (plasmakanon, ∞ soldaten, 5 drones).
+- **Drie voorinstellingen**: *Standaard Arcade* (100% tempo, 1,0× stages), *Snelle Chaos* (175% tempo, 175% HP) en *Oppermacht Sandbox* (plasmakanon, ∞ soldaten, 5 drones).
 - **Instelbaar**: tempo, stage-lengte, vijand-HP, horde-dichtheid, leger-limiet, goud-bonus, mini- en eindbazen, start-schild/-drones, startwapen, arena/biome, paarse MAX-poortjes (frequentie, dubbel/enkel, min/max-hoogte) en de frequentie van innovatieve situaties.
 
 ## Lokaal draaien

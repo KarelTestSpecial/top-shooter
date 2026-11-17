@@ -3,6 +3,7 @@ import {
   BarrelSpec,
   BarrierSpec,
   EnemySpec,
+  GAME_SPEED_CALIBRATION,
   GateSpec,
   generateStageEvents,
   getFireRateMultiplier,
@@ -266,7 +267,7 @@ export class GameEngine {
     this.stage = stage;
     this.settings = settings;
     this.stageLengthUnits = getStageLengthMetrics(settings.stageLengthFactor, stage).units;
-    this.speedMult = settings.gameSpeed;
+    this.speedMult = settings.gameSpeed * GAME_SPEED_CALIBRATION;
     this.difficultyGoldMult = settings.goldMult;
     this.difficultyDmgMult = Math.sqrt(settings.enemyHpMult);
     this.miniBossDmgMult = Math.sqrt(settings.miniBossMult);

@@ -9,7 +9,13 @@ import {
   ABSOLUTE_MAX_CAP,
   DEFAULT_GAMEPLAY_SETTINGS,
   DEFAULT_UPGRADE_WEIGHTS,
+  GAME_SPEED_CALIBRATION,
+  GAME_SPEED_MAX,
+  GAME_SPEED_MIN,
   MAX_UPGRADE_LEVEL,
+  STAGE_LENGTH_BASE_BLOCKS,
+  STAGE_LENGTH_MAX,
+  STAGE_LENGTH_MIN,
   STAGE_LENGTH_PRESETS,
   getStageLengthMetrics,
   getStartSquadCount,
@@ -29,6 +35,8 @@ const STORAGE_KEY = 'poortrush_progress_v1';
 const SLOTS_KEY = 'poortrush_slots_v1';
 const SLOT_COUNT = 3;
 
+const CURRENT_SETTINGS_VERSION = 11;
+
 const DEFAULT_PROGRESS: PersistentProgress = {
   gold: 0,
   highestStage: 1,
@@ -43,12 +51,23 @@ const DEFAULT_PROGRESS: PersistentProgress = {
   upgradeSplit: { ...DEFAULT_UPGRADE_WEIGHTS },
   muted: false,
   settings: DEFAULT_GAMEPLAY_SETTINGS,
-  settingsVersion: 8,
+  settingsVersion: CURRENT_SETTINGS_VERSION,
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
   if (typeof val !== 'number' || Number.isNaN(val)) return fallback;
   return Math.max(min, Math.min(max, val));
+}
+
+function recalibrateLegacyGameSpeed(legacySpeed: number): number {
+  const scaled = Math.round((legacySpeed / GAME_SPEED_CALIBRATION) * 20) / 20;
+  return clampNum(scaled, GAME_SPEED_MIN, GAME_SPEED_MAX, DEFAULT_GAMEPLAY_SETTINGS.gameSpeed);
+}
+
+function recalibrateLegacyStageLength(legacyFactor: number): number {
+  const legacyBlocks = Math.max(1, Math.round(1 + (legacyFactor - 1) * 2.2));
+  const scaled = Math.round((legacyBlocks / STAGE_LENGTH_BASE_BLOCKS) * 10) / 10;
+  return clampNum(scaled, STAGE_LENGTH_MIN, STAGE_LENGTH_MAX, DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor);
 }
 
 /** Compacte HP-notatie: 1282430 -> 1,28M, 24500 -> 25k. */
@@ -80,18 +99,39 @@ function loadProgress(): PersistentProgress {
     const legacySpeedMap: Record<string, number> = { SLOW: 0.78, NORMAL: 1, TURBO: 1.35 };
     const legacyBossMap: Record<string, number> = { WEAK: 0.6, NORMAL: 1, STRONG: 1.75, TITAN: 2.8 };
 
+    const savedVersion = parsed.settingsVersion ?? 1;
+    let hasSavedStageLength =
+      typeof saved.stageLengthFactor === 'number' ||
+      (typeof saved.stageLength === 'string' && saved.stageLength in legacyLenMap) ||
+      (typeof parsed.stageLength === 'string' && parsed.stageLength in legacyLenMap);
+
     let stageLengthFactor = DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor;
     if (typeof saved.stageLengthFactor === 'number') {
-      stageLengthFactor = clampNum(saved.stageLengthFactor, 1, 6, 1);
+      stageLengthFactor =
+        savedVersion < 11
+          ? clampNum(saved.stageLengthFactor, 1, 6, 6)
+          : clampNum(
+              saved.stageLengthFactor,
+              STAGE_LENGTH_MIN,
+              STAGE_LENGTH_MAX,
+              DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor,
+            );
     } else if (typeof saved.stageLength === 'string' && saved.stageLength in legacyLenMap) {
       stageLengthFactor = legacyLenMap[saved.stageLength];
     } else if (typeof parsed.stageLength === 'string' && parsed.stageLength in legacyLenMap) {
       stageLengthFactor = legacyLenMap[parsed.stageLength];
     }
 
+    let hasSavedSpeed =
+      typeof saved.gameSpeed === 'number' ||
+      (typeof saved.gameSpeed === 'string' && saved.gameSpeed in legacySpeedMap);
+
     let gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
     if (typeof saved.gameSpeed === 'number') {
-      gameSpeed = clampNum(saved.gameSpeed, 0.6, 1.6, 1);
+      gameSpeed =
+        savedVersion < 10
+          ? clampNum(saved.gameSpeed, 0.6, 1.6, 0.8)
+          : clampNum(saved.gameSpeed, GAME_SPEED_MIN, GAME_SPEED_MAX, DEFAULT_GAMEPLAY_SETTINGS.gameSpeed);
     } else if (typeof saved.gameSpeed === 'string' && saved.gameSpeed in legacySpeedMap) {
       gameSpeed = legacySpeedMap[saved.gameSpeed];
     }
@@ -199,6 +239,7 @@ function loadProgress(): PersistentProgress {
       bossMult === 1
     ) {
       gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+      hasSavedSpeed = false;
       enemyHpMult = DEFAULT_GAMEPLAY_SETTINGS.enemyHpMult;
       enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
       enemyMaxGroupSize = DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize;
@@ -220,26 +261,35 @@ function loadProgress(): PersistentProgress {
       if (goldMult === 1.15) goldMult = DEFAULT_GAMEPLAY_SETTINGS.goldMult;
     }
 
-    // v6: 100% tempo is de nieuwe standaard. De oude 90%- en 110%-waarden
-    // worden naar 100% getrokken; een bewust afwijkend tempo blijft behouden.
-    if ((parsed.settingsVersion ?? 1) < 6) {
-      if (gameSpeed === 0.9 || gameSpeed === 1.1) gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+    // v6: 100% tempo was de toenmalige standaard (0.9 op de oude schaal).
+    if (savedVersion < 6) {
+      if (gameSpeed === 0.9 || gameSpeed === 1.1) gameSpeed = 0.9;
     }
 
     // v7: dubbele paarse poortjes zijn ongewenst; standaard 15% i.p.v. 55%.
-    if ((parsed.settingsVersion ?? 1) < 7) {
+    if (savedVersion < 7) {
       if (purpleDoubleChance === 55) purpleDoubleChance = DEFAULT_GAMEPLAY_SETTINGS.purpleDoubleChance;
     }
 
     // v8: rustiger basis-tempo, lange stages en een vlakkere power-curve.
-    if ((parsed.settingsVersion ?? 1) < 8) {
-      if (gameSpeed === 1.0 || gameSpeed === 1.1) gameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
-      if (stageLengthFactor === 1) stageLengthFactor = DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor;
+    if (savedVersion < 8) {
+      if (gameSpeed === 1.0 || gameSpeed === 1.1) gameSpeed = 0.9;
+      if (stageLengthFactor === 1) stageLengthFactor = 3;
       if (maxSquadCap === 300) maxSquadCap = DEFAULT_GAMEPLAY_SETTINGS.maxSquadCap;
       if (purpleGateMin === 75) purpleGateMin = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMin;
       if (purpleGateMax === 300) purpleGateMax = DEFAULT_GAMEPLAY_SETTINGS.purpleGateMax;
       if (enemyCountMult === 1.35) enemyCountMult = DEFAULT_GAMEPLAY_SETTINGS.enemyCountMult;
       if (enemyMaxGroupSize === 140) enemyMaxGroupSize = DEFAULT_GAMEPLAY_SETTINGS.enemyMaxGroupSize;
+    }
+
+    // v10: herijking spelsnelheid — de vroegere 80% (0.80) is nu 100% (1.00).
+    if (savedVersion < 10 && hasSavedSpeed) {
+      gameSpeed = recalibrateLegacyGameSpeed(gameSpeed);
+    }
+
+    // v11: herijking stage-lengte — de vroegere 6,0× (12 blokken) is nu 1,0× (midden & standaard).
+    if (savedVersion < 11 && hasSavedStageLength) {
+      stageLengthFactor = recalibrateLegacyStageLength(stageLengthFactor);
     }
 
     return {
@@ -275,7 +325,7 @@ function loadProgress(): PersistentProgress {
         bossMult,
         specialSituations,
       },
-      settingsVersion: 9,
+      settingsVersion: CURRENT_SETTINGS_VERSION,
     };
   } catch {
     return DEFAULT_PROGRESS;
@@ -299,6 +349,26 @@ function coerceSlotProgress(raw: unknown): PersistentProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const p = raw as Partial<PersistentProgress> & { settings?: Partial<GameplaySettings> };
   const saved = (p.settings ?? {}) as Partial<GameplaySettings>;
+  const slotVersion = p.settingsVersion ?? 1;
+  let slotGameSpeed = DEFAULT_GAMEPLAY_SETTINGS.gameSpeed;
+  if (typeof saved.gameSpeed === 'number') {
+    slotGameSpeed =
+      slotVersion < 10
+        ? recalibrateLegacyGameSpeed(clampNum(saved.gameSpeed, 0.6, 1.6, 0.8))
+        : clampNum(saved.gameSpeed, GAME_SPEED_MIN, GAME_SPEED_MAX, DEFAULT_GAMEPLAY_SETTINGS.gameSpeed);
+  }
+  let slotStageLengthFactor = DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor;
+  if (typeof saved.stageLengthFactor === 'number') {
+    slotStageLengthFactor =
+      slotVersion < 11
+        ? recalibrateLegacyStageLength(clampNum(saved.stageLengthFactor, 1, 6, 6))
+        : clampNum(
+            saved.stageLengthFactor,
+            STAGE_LENGTH_MIN,
+            STAGE_LENGTH_MAX,
+            DEFAULT_GAMEPLAY_SETTINGS.stageLengthFactor,
+          );
+  }
   return {
     gold: Math.max(0, clampNum(p.gold, 0, Number.MAX_SAFE_INTEGER, 0)),
     highestStage: Math.max(1, Math.round(clampNum(p.highestStage, 1, 9999, 1))),
@@ -312,8 +382,13 @@ function coerceSlotProgress(raw: unknown): PersistentProgress | null {
     },
     upgradeSplit: coerceUpgradeSplit(p.upgradeSplit),
     muted: Boolean(p.muted),
-    settings: { ...DEFAULT_GAMEPLAY_SETTINGS, ...saved },
-    settingsVersion: DEFAULT_PROGRESS.settingsVersion,
+    settings: {
+      ...DEFAULT_GAMEPLAY_SETTINGS,
+      ...saved,
+      gameSpeed: slotGameSpeed,
+      stageLengthFactor: slotStageLengthFactor,
+    },
+    settingsVersion: CURRENT_SETTINGS_VERSION,
   };
 }
 

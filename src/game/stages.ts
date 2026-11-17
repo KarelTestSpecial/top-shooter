@@ -11,6 +11,15 @@ import {
 export const ABSOLUTE_MAX_CAP = 1250;
 
 /**
+ * Herijking van de spelsnelheid: de vroegere 80% (0.80) vormt voortaan het
+ * 100%-ijkpunt (gameSpeed = 1.0) in de engine en de UI.
+ */
+export const GAME_SPEED_CALIBRATION = 0.8;
+export const GAME_SPEED_MIN = 0.6;
+export const GAME_SPEED_MAX = 2.0;
+export const GAME_SPEED_STEP = 0.05;
+
+/**
  * Wereldwijde vijand-druk. De speler groeide vroeger sneller dan de
  * vijand-aantallen, waardoor golven wegsmolten voor ze de speler bereikten.
  * Deze factor zet de basisgolven omhoog; settings.enemyCountMult blijft
@@ -18,11 +27,16 @@ export const ABSOLUTE_MAX_CAP = 1250;
  */
 const ENEMY_PRESSURE_FACTOR = 1.15;
 
+export const STAGE_LENGTH_MIN = 0.2;
+export const STAGE_LENGTH_MAX = 1.8;
+export const STAGE_LENGTH_STEP = 0.1;
+export const STAGE_LENGTH_BASE_BLOCKS = 12; // 1.0× = 12 middenblokken (vroegere 6.0×)
+
 export const STAGE_LENGTH_PRESETS: Array<{ factor: number; label: string; shortLabel: string }> = [
-  { factor: 1, label: 'Standaard', shortLabel: '1×' },
-  { factor: 2, label: 'Lang', shortLabel: '2×' },
-  { factor: 3, label: 'Marathon', shortLabel: '3×' },
-  { factor: 6, label: 'Ultra', shortLabel: '6×' },
+  { factor: 0.4, label: 'Kort', shortLabel: '0,4×' },
+  { factor: 1.0, label: 'Standaard', shortLabel: '1,0×' },
+  { factor: 1.4, label: 'Lang', shortLabel: '1,4×' },
+  { factor: 1.8, label: 'Ultra', shortLabel: '1,8×' },
 ];
 
 /**
@@ -39,18 +53,23 @@ export function getStageLengthBonusBlocks(stage: number, baseBlocks = 5): number
 }
 
 export function getStageLengthMetrics(factor: number, stage = 1) {
-  const clamped = Math.max(1, Math.min(6, Math.round(factor * 2) / 2));
-  const baseBlocks = Math.max(1, Math.round(1 + (clamped - 1) * 2.2));
+  const clamped = Math.max(
+    STAGE_LENGTH_MIN,
+    Math.min(STAGE_LENGTH_MAX, Math.round(factor * 10) / 10),
+  );
+  const baseBlocks = Math.max(2, Math.round(clamped * STAGE_LENGTH_BASE_BLOCKS));
   const extraBlocks = baseBlocks + getStageLengthBonusBlocks(stage, baseBlocks);
   const units = 190 + extraBlocks * 95;
-  const goldMult = 1 + (clamped - 1) * 0.34;
-  const bossHpMult = 1 + (clamped - 1) * 0.28;
+  const legacySpan = Math.max(0, (baseBlocks - 1) / 2.2);
+  const goldMult = 1 + legacySpan * 0.34;
+  const bossSpan = legacySpan <= 5 ? legacySpan : 5 + (legacySpan - 5) * 0.45;
+  const bossHpMult = 1 + bossSpan * 0.28;
   return { factor: clamped, baseBlocks, extraBlocks, units, goldMult, bossHpMult };
 }
 
 export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
-  stageLengthFactor: 3,
-  gameSpeed: 0.9,
+  stageLengthFactor: 1.0,
+  gameSpeed: 1.0,
   enemyHpMult: 1.3,
   enemyCountMult: 1.15,
   enemyMaxGroupSize: 120,
@@ -63,8 +82,8 @@ export const DEFAULT_GAMEPLAY_SETTINGS: GameplaySettings = {
   purpleGateFreq: 15,
   purpleDoubleChance: 15,
   purpleGateMin: 60,
-  purpleGateMax: 220,
-  miniBossMult: 1.4,
+  purpleGateMax: 250,
+  miniBossMult: 1.6,
   bossMult: 1.5,
   specialSituations: 100,
 };
@@ -561,7 +580,9 @@ function appendMiddleBlock(
 ) {
   const flip = (blockIndex + stage) % 2 === 1;
   const pattern = (stage + blockIndex * 3) % 4;
-  const s = hpScale * (1 + blockIndex * 0.18);
+  const blockScaleBonus =
+    blockIndex <= 12 ? blockIndex * 0.18 : 12 * 0.18 + (blockIndex - 12) * 0.08;
+  const s = hpScale * (1 + blockScaleBonus);
   const dmgBase = Math.max(2, Math.round((6 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
   const weaponChoices: WeaponTier[] = ['SPREAD', 'ROCKET', 'LASER'];
   const crateWeapon = weaponChoices[(stage + blockIndex) % weaponChoices.length];
@@ -1018,7 +1039,7 @@ function appendMiddleBlock(
       hp: Math.round(
         560 *
           getStageCurve(stage, 1.3, 1.1) *
-          (1 + blockIndex * 0.25) *
+          (1 + (blockIndex <= 12 ? blockIndex * 0.25 : 12 * 0.25 + (blockIndex - 12) * 0.11)) *
           settings.enemyHpMult *
           settings.miniBossMult,
       ),
@@ -1296,7 +1317,9 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
 
   // === FINAL ACT ===
   const finalOffset = 95 + extraMiddleBlocks * 95;
-  const finalScale = hpScale * (1 + extraMiddleBlocks * 0.16);
+  const finalScaleBonus =
+    extraMiddleBlocks <= 12 ? extraMiddleBlocks * 0.16 : 12 * 0.16 + (extraMiddleBlocks - 12) * 0.07;
+  const finalScale = hpScale * (1 + finalScaleBonus);
   const finalBarrierDmg = Math.max(2, Math.round((7 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
 
   events.push({

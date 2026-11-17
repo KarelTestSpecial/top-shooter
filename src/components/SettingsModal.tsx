@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, RotateCcw, X } from 'lucide-react';
 import { WEAPON_LABELS } from '../game/engine';
-import { ABSOLUTE_MAX_CAP, DEFAULT_GAMEPLAY_SETTINGS, getPurpleGateRange, getStageLengthMetrics } from '../game/stages';
+import {
+  ABSOLUTE_MAX_CAP,
+  DEFAULT_GAMEPLAY_SETTINGS,
+  GAME_SPEED_MAX,
+  GAME_SPEED_MIN,
+  GAME_SPEED_STEP,
+  STAGE_LENGTH_MAX,
+  STAGE_LENGTH_MIN,
+  STAGE_LENGTH_STEP,
+  getPurpleGateRange,
+  getStageLengthMetrics,
+} from '../game/stages';
 import { BiomeChoice, GameplaySettings, WeaponTier } from '../game/types';
 
 interface SettingsModalProps {
@@ -14,15 +25,15 @@ interface SettingsModalProps {
 const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> = [
   {
     label: 'Standaard Arcade',
-    desc: '90% tempo · lange stages · 130% HP · 115% vijanden',
+    desc: '100% tempo · 1,0× stages · 130% HP · 115% vijanden',
     values: DEFAULT_GAMEPLAY_SETTINGS,
   },
   {
     label: 'Snelle Chaos',
-    desc: '140% tempo · 175% HP · 2,2× Bazen',
+    desc: '175% tempo · 175% HP · 2,2× Bazen',
     values: {
-      stageLengthFactor: 1.5,
-      gameSpeed: 1.4,
+      stageLengthFactor: 0.2,
+      gameSpeed: 1.75,
       enemyHpMult: 1.75,
       enemyCountMult: 1.7,
       enemyMaxGroupSize: 150,
@@ -45,8 +56,8 @@ const PRESETS: Array<{ label: string; desc: string; values: GameplaySettings }> 
     label: 'Oppermacht Sandbox',
     desc: 'Plasmakanon · ∞ Soldaten · 5 Drones',
     values: {
-      stageLengthFactor: 2,
-      gameSpeed: 1,
+      stageLengthFactor: 0.3,
+      gameSpeed: 1.25,
       enemyHpMult: 0.9,
       enemyCountMult: 2.0,
       enemyMaxGroupSize: 180,
@@ -225,9 +236,9 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
                   label="Stage-lengte"
                   valueText={`${fmtFactor(stageMetrics.factor)}× (${stageMetrics.units}u)`}
                   value={settings.stageLengthFactor}
-                  min={1}
-                  max={6}
-                  step={0.5}
+                  min={STAGE_LENGTH_MIN}
+                  max={STAGE_LENGTH_MAX}
+                  step={STAGE_LENGTH_STEP}
                   onChange={(v) => update('stageLengthFactor', v)}
                 />
                 <SliderRow
@@ -235,9 +246,9 @@ export function SettingsModal({ settings, currentStage = 1, onChange, onClose }:
                   label="Spelsnelheid"
                   valueText={`${Math.round(settings.gameSpeed * 100)}%`}
                   value={settings.gameSpeed}
-                  min={0.6}
-                  max={1.6}
-                  step={0.05}
+                  min={GAME_SPEED_MIN}
+                  max={GAME_SPEED_MAX}
+                  step={GAME_SPEED_STEP}
                   onChange={(v) => update('gameSpeed', v)}
                 />
               </div>
