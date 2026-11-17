@@ -687,6 +687,8 @@ export class GameEngine {
                 damage: Math.round(70 * Math.pow(1.24, this.stage - 1)),
                 chains: 6 + Math.min(4, Math.floor(this.stage / 3)),
               }
+            : b.kind === 'WEAPON_DOWN_CRATE'
+            ? { type: 'WEAPON_DOWN' as const }
             : b.kind === 'TNT_BARREL'
             ? {
                 type: 'TNT' as const,
@@ -800,7 +802,7 @@ export class GameEngine {
         maxHp: bossHp,
         flashTimer: 0,
         goldReward: payload.goldReward,
-        attackTimer: payload.kind === 'CARRIER' ? 1.2 : isMini ? 1.55 : 1.25,
+        attackTimer: payload.kind === 'CARRIER' ? 1.2 : isMini ? 0.25 : 1.25,
         patternStep: 0,
         rotorAngle: 0,
         telegraphLanes: [],
@@ -1198,12 +1200,27 @@ export class GameEngine {
     sound.playHit();
     const proj = this.project(barrel.x, barrel.z);
     if (Math.random() < 0.4) {
-      this.spawnParticles(proj.x, proj.y, barrel.kind === 'WEAPON_CRATE' ? '#FBBF24' : '#A16207', 2);
+      this.spawnParticles(
+        proj.x,
+        proj.y,
+        barrel.kind === 'WEAPON_DOWN_CRATE' ? '#EF4444' : barrel.kind === 'WEAPON_CRATE' ? '#FBBF24' : '#A16207',
+        2,
+      );
     }
     if (barrel.hp <= 0) {
       barrel.destroyed = true;
       barrel.hp = 0;
-      const isSpecial = barrel.reward.type !== 'GOLD';
+      const isWeaponDown = barrel.reward.type === 'WEAPON_DOWN';
+      const isSpecial = barrel.reward.type !== 'GOLD' && !isWeaponDown;
+
+      if (isWeaponDown) {
+        sound.playNegativeGate();
+        this.spawnParticles(proj.x, proj.y, '#EF4444', 16);
+        this.spawnShockwave(proj.x, proj.y, '#EF4444', 64);
+        this.downgradeWeapon();
+        return;
+      }
+
       sound.playCrateBreak(isSpecial);
       this.spawnParticles(proj.x, proj.y, isSpecial ? '#FACC15' : '#F59E0B', 14);
       this.spawnShockwave(proj.x, proj.y, isSpecial ? '#FDE047' : '#F59E0B', 52);
@@ -1255,6 +1272,29 @@ export class GameEngine {
     } else {
       this.tempFireRateBonus = Math.min(2.3, this.tempFireRateBonus + 0.15);
     }
+  }
+
+  private downgradeWeapon() {
+    const order: WeaponTier[] = ['RIFLE', 'DOUBLE', 'SPREAD', 'ROCKET', 'LASER'];
+    const currentIdx = order.indexOf(this.weaponTier);
+    const proj = this.project(this.playerX, 0.92);
+    if (currentIdx > 0) {
+      const prevTier = order[currentIdx - 1];
+      this.weaponTier = prevTier;
+      this.spawnFloatingText(
+        proj.x,
+        proj.y - 28,
+        `WAPEN TERUG: ${WEAPON_LABELS[prevTier].toUpperCase()}`,
+        '#FCA5A5',
+        1.25,
+      );
+    } else if (this.tempFireRateBonus > 1.05) {
+      this.tempFireRateBonus = Math.max(1, this.tempFireRateBonus - 0.2);
+      this.spawnFloatingText(proj.x, proj.y - 28, 'VUURSNELHEID OMLAAG!', '#FCA5A5', 1.2);
+    } else {
+      this.absorbOrDamageSquad(Math.min(3, Math.max(1, this.squadCount - 1)), 'SABOTAGE! -3', false);
+    }
+    this.pushHud();
   }
 
   private damageEnemyGroup(group: EnemyGroup, dmg: number) {
@@ -1395,6 +1435,36 @@ export class GameEngine {
         sound.playCrateBreak(true);
         this.addSquad(4);
         this.spawnFloatingText(proj.x, proj.y - 24, `MINI-BAAS VERSLAGEN! +${earned} GOUD`, '#FDE047', 1.35);
+
+        const deathBlastChance = this.stage >= 4 ? 0.28 : 0.22;
+        if (Math.random() < deathBlastChance) {
+          this.spawnParticles(proj.x, proj.y, '#FB923C', 28);
+          this.spawnShockwave(proj.x, proj.y, '#EF4444', 180);
+          this.spawnFloatingText(this.width * 0.5, this.height * 0.28, 'PAS OP! NOODONTPLOFFING!', '#FCA5A5', 1.3);
+          const shrapnelDmg = Math.max(2, Math.round((2 + Math.floor(this.stage * 0.65)) * this.difficultyDmgMult));
+          for (const offset of [-0.18, 0.18]) {
+            this.hazards.push({
+              id: this.nextEntityId++,
+              x: Math.max(-0.74, Math.min(0.74, defeated.x + offset)),
+              z: defeated.z + 0.04,
+              speed: 0.62,
+              damage: shrapnelDmg,
+              radius: 0.11,
+            });
+          }
+          this.mortarStrikes.push({
+            id: this.nextEntityId++,
+            x: Math.max(-0.72, Math.min(0.72, this.playerX)),
+            z: 0.9,
+            timer: 0.78,
+            maxTimer: 0.78,
+            radius: 0.2,
+            damage: Math.max(2, Math.round((3 + Math.floor(this.stage * 0.75)) * this.difficultyDmgMult)),
+            kind: 'BARRAGE',
+            droneDamage: true,
+          });
+        }
+
         if (!this.reducedMotion) this.shakeIntensity = 7;
         return;
       }
@@ -1702,6 +1772,13 @@ export class GameEngine {
             true,
           );
           this.triggerAoeBlast(b.x, b.z, 70, 0.45, '#EF4444');
+        } else if (b.kind === 'WEAPON_DOWN_CRATE') {
+          b.destroyed = true;
+          sound.playNegativeGate();
+          const proj = this.project(b.x, b.z);
+          this.spawnParticles(proj.x, proj.y, '#EF4444', 14);
+          this.spawnShockwave(proj.x, proj.y, '#EF4444', 60);
+          this.downgradeWeapon();
         } else {
           const loss = Math.max(2, Math.min(8, Math.ceil(b.hp / 22)));
           b.destroyed = true;
@@ -1814,7 +1891,9 @@ export class GameEngine {
               }
             }
           }
-          if (g.z > 0.52) {
+          if (this.stage >= 3 && g.z <= 0.52) {
+            g.x = Math.max(-0.76, Math.min(0.76, g.x + Math.sin(this.elapsedTime * 2.6 + g.id) * 0.2 * dt));
+          } else if (g.z > 0.52) {
             g.x += (this.playerX - g.x) * Math.min(1, dt * 1.0);
           }
         } else if (g.kind === 'RUSHER') {
@@ -1938,6 +2017,13 @@ export class GameEngine {
             g.x += (this.playerX - g.x) * Math.min(1, dt * 1.7);
           }
           g.x = Math.max(-0.76, Math.min(0.76, g.x));
+        } else if (g.kind === 'BRUTE' && this.stage >= 3) {
+          if (g.z > 0.55) {
+            g.x += (this.playerX - g.x) * Math.min(1, dt * 0.85);
+          } else {
+            g.x += Math.sin(this.elapsedTime * 2.2 + g.id) * 0.18 * dt;
+          }
+          g.x = Math.max(-0.76, Math.min(0.76, g.x));
         } else if (g.z > 0.55) {
           g.x += (this.playerX - g.x) * Math.min(1, dt * 0.85);
         }
@@ -2029,7 +2115,8 @@ export class GameEngine {
 
     if (this.freezeTimer <= 0) {
       if (boss.z < boss.targetZ) {
-        boss.z = Math.min(boss.targetZ, boss.z + 0.16 * dt);
+        const entrySpeed = boss.isMiniBoss ? 0.28 : 0.16;
+        boss.z = Math.min(boss.targetZ, boss.z + entrySpeed * dt);
       } else {
         const speedMult =
           (enraged ? 1.45 : 1) * (boss.kind === 'HELI' ? 1.25 : boss.kind === 'CARRIER' ? 1.05 : 1);
@@ -2041,7 +2128,12 @@ export class GameEngine {
           boss.x = -0.55;
           boss.vx = Math.abs(boss.vx);
         }
+      }
 
+      // Mini-bazen beginnen al kort vóór aankomst op targetZ met hun eerste schot
+      // zodat ze niet vrijwel altijd verslagen zijn nog voor ze een projectiel afvuren.
+      const readyToAttack = boss.isMiniBoss ? boss.z >= boss.targetZ * 0.6 : boss.z >= boss.targetZ;
+      if (readyToAttack) {
         if (boss.telegraphLanes.length > 0) {
           boss.telegraphTimer -= dt * this.speedMult;
           if (boss.telegraphTimer <= 0) {
@@ -2072,8 +2164,6 @@ export class GameEngine {
               boss.patternStep = (boss.patternStep ?? 0) + 1;
               const spread = BOSS_LANE_GAP;
               if (boss.patternStep % 2 === 0) {
-                // Bommenwerpers plus een spervuur op de flank: niet enkel een
-                // passieve golf die je doodschiet terwijl de baas stilstaat.
                 this.spawnCarrierBombers(boss);
                 boss.telegraphLanes = [
                   Math.max(-0.72, primary - spread),
@@ -2275,7 +2365,15 @@ export class GameEngine {
     }
     if (this.boss) this.damageBoss(dmg * 0.55);
     for (const barrel of this.barrels) {
-      if (!barrel.destroyed) this.damageBarrel(barrel, dmg);
+      if (!barrel.destroyed) {
+        if (barrel.kind === 'WEAPON_DOWN_CRATE') {
+          barrel.destroyed = true;
+          const bp = this.project(barrel.x, barrel.z);
+          this.spawnParticles(bp.x, bp.y, '#EF4444', 10);
+        } else {
+          this.damageBarrel(barrel, dmg);
+        }
+      }
     }
     for (const br of this.barriers) {
       if (!br.destroyed) this.damageBarrier(br, dmg);
@@ -2945,6 +3043,10 @@ export class GameEngine {
       bodyColor = '#7E22CE';
       rimColor = '#E9D5FF';
       badgeText = 'TESLA';
+    } else if (b.kind === 'WEAPON_DOWN_CRATE') {
+      bodyColor = '#7F1D1D';
+      rimColor = '#F87171';
+      badgeText = 'WAPEN ▼';
     }
 
     if (b.flashTimer > 0) bodyColor = '#FFFFFF';
@@ -2989,7 +3091,7 @@ export class GameEngine {
     if (badgeText) {
       const bob = Math.sin(this.elapsedTime * 5 + b.id) * 2.5;
       ctx.font = `800 ${Math.max(10, Math.round(12 * p.scale))}px "Barlow Condensed", sans-serif`;
-      ctx.fillStyle = b.kind === 'TNT_BARREL' ? '#FCA5A5' : '#FEF08A';
+      ctx.fillStyle = b.kind === 'TNT_BARREL' || b.kind === 'WEAPON_DOWN_CRATE' ? '#FCA5A5' : '#FEF08A';
       ctx.strokeStyle = '#090D16';
       ctx.lineWidth = 3;
       ctx.strokeText(badgeText, p.x, by - 10 * p.scale + bob);

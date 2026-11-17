@@ -258,7 +258,8 @@ export interface BarrelSpec {
     | 'CRYO_CRATE'
     | 'HYPER_CRATE'
     | 'TESLA_CRATE'
-    | 'TNT_BARREL';
+    | 'TNT_BARREL'
+    | 'WEAPON_DOWN_CRATE';
   weaponTier?: WeaponTier;
   squadBonus?: number;
   goldAmount?: number;
@@ -583,13 +584,15 @@ function appendMiddleBlock(
   slotCounter: { next: number; lastPurpleAt: number },
 ) {
   const flip = (blockIndex + stage) % 2 === 1;
-  const pattern = (stage + blockIndex * 3) % 4;
+  const patternCount = stage >= 2 ? 6 : 4;
+  const pattern = (stage * 3 + blockIndex * 5) % patternCount;
   const blockScaleBonus =
     blockIndex <= 12 ? blockIndex * 0.18 : 12 * 0.18 + (blockIndex - 12) * 0.08;
   const s = hpScale * (1 + blockScaleBonus);
   const dmgBase = Math.max(2, Math.round((6 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
   const weaponChoices: WeaponTier[] = ['SPREAD', 'ROCKET', 'LASER'];
   const crateWeapon = weaponChoices[(stage + blockIndex) % weaponChoices.length];
+  const canSabotage = stage >= 2 && specialChance(settings) > 0;
 
   if (pattern === 0) {
     // Pattern 0: Hinderlaag, Bombers & Vaten-Keten
@@ -919,7 +922,7 @@ function appendMiddleBlock(
         right: { op: 'DMG_UP', value: 28, shootable: false, shotsPerStep: 12 } satisfies GateSpec,
       },
     });
-  } else {
+  } else if (pattern === 3) {
     // Pattern 3: Goudkoorts & Bomber-Overval
     events.push({
       atDistance: offset + 5,
@@ -949,7 +952,7 @@ function appendMiddleBlock(
         { x: -0.58, hp: Math.round(56 * s), kind: 'WOOD', goldAmount: 32 },
         { x: -0.2, hp: Math.round(56 * s), kind: 'SQUAD_CRATE', squadBonus: 8 + stage * 2 },
         { x: 0.2, hp: Math.round(64 * s), kind: 'TESLA_CRATE' },
-        { x: 0.58, hp: Math.round(56 * s), kind: 'DRONE_CRATE' },
+        { x: 0.58, hp: Math.round(56 * s), kind: canSabotage && blockIndex % 2 === 0 ? 'WEAPON_DOWN_CRATE' : 'DRONE_CRATE' },
       ] satisfies BarrelSpec[],
     });
 
@@ -1014,6 +1017,197 @@ function appendMiddleBlock(
         right: { op: 'DIV', value: 2, shootable: false, shotsPerStep: 12, moveAmp: slideAmp * 0.65 } satisfies GateSpec,
       },
     });
+  } else if (pattern === 4) {
+    // Pattern 4: Barrière-Front, Sabotage-Krat & Kruisvuur
+    events.push({
+      atDistance: offset + 4,
+      type: 'BARRIER',
+      payload: [
+        { x: flip ? -0.46 : 0.46, width: 0.88, hp: Math.round(145 * s), damage: dmgBase },
+      ] satisfies BarrierSpec[],
+    });
+    events.push({
+      atDistance: offset + 12,
+      type: 'BARRIER',
+      payload: [
+        { x: flip ? 0.46 : -0.46, width: 0.88, hp: Math.round(145 * s), damage: dmgBase },
+      ] satisfies BarrierSpec[],
+    });
+    events.push({
+      atDistance: offset + 18,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: flip ? 0.5 : -0.5,
+          count: computeEnemyCount(2, offset + 18, totalUnits, stage, blockIndex * 10 + 32, 'ELITE', settings, true),
+          hpPerUnit: Math.round(24 * s),
+          kind: 'SNIPER',
+          speed: 0.13,
+        },
+        {
+          x: 0.0,
+          count: computeEnemyCount(14, offset + 18, totalUnits, stage, blockIndex * 10 + 33, 'STANDARD', settings),
+          hpPerUnit: Math.round(5.8 * s),
+          kind: 'RAIDER',
+        },
+      ] satisfies EnemySpec[],
+    });
+
+    maybeAppendPurpleGate(events, offset + 28, totalUnits, stage, slotCounter, slideAmp, settings);
+
+    events.push({
+      atDistance: offset + 35,
+      type: 'BARRELS',
+      payload: [
+        { x: flip ? -0.56 : 0.56, hp: Math.round(54 * s), kind: canSabotage ? 'WEAPON_DOWN_CRATE' : 'STEEL', goldAmount: 36 },
+        { x: 0.0, hp: Math.round(64 * s), kind: 'WEAPON_CRATE', weaponTier: crateWeapon },
+        { x: flip ? 0.56 : -0.56, hp: Math.round(54 * s), kind: 'SHIELD_CRATE' },
+      ] satisfies BarrelSpec[],
+    });
+
+    events.push({
+      atDistance: offset + 47,
+      type: 'GATE_PAIR',
+      payload: {
+        left: { op: 'RATE_UP', value: 25, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.45 } satisfies GateSpec,
+        right: { op: 'ADD', value: -10, shootable: true, shotsPerStep: Math.max(4, Math.round(4.6 * s * 0.5)) } satisfies GateSpec,
+      },
+    });
+
+    events.push({
+      atDistance: offset + 60,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.44,
+          count: computeEnemyCount(5, offset + 60, totalUnits, stage, blockIndex * 10 + 34, 'ELITE', settings, true),
+          hpPerUnit: Math.round(20 * s),
+          kind: 'BRUTE',
+        },
+        {
+          x: 0.44,
+          count: computeEnemyCount(5, offset + 60, totalUnits, stage, blockIndex * 10 + 35, 'SCOUT', settings),
+          hpPerUnit: Math.round(6.6 * s),
+          kind: 'BOMBER',
+          speed: 0.38,
+        },
+      ] satisfies EnemySpec[],
+    });
+    events.push({
+      atDistance: offset + 62,
+      type: 'BARRELS',
+      payload: [{ x: 0.0, hp: Math.round(28 * s), kind: 'TNT_BARREL' }] satisfies BarrelSpec[],
+    });
+
+    maybeAppendPurpleGate(events, offset + 71, totalUnits, stage, slotCounter, slideAmp, settings);
+
+    events.push({
+      atDistance: offset + 77,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: 0.0,
+          count: computeEnemyCount(16, offset + 77, totalUnits, stage, blockIndex * 10 + 36, 'SWARM', settings),
+          hpPerUnit: Math.round(5.6 * s),
+          kind: 'RUSHER',
+          speed: 0.45,
+        },
+      ] satisfies EnemySpec[],
+    });
+  } else {
+    // Pattern 5: Snelle Stormloop & Poorten-Doolhof
+    events.push({
+      atDistance: offset + 5,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.42,
+          count: computeEnemyCount(9, offset + 5, totalUnits, stage, blockIndex * 10 + 37, 'STANDARD', settings),
+          hpPerUnit: Math.round(4.9 * s),
+          kind: 'RUSHER',
+          speed: 0.45,
+        },
+        {
+          x: 0.42,
+          count: computeEnemyCount(4, offset + 5, totalUnits, stage, blockIndex * 10 + 38, 'SCOUT', settings),
+          hpPerUnit: Math.round(7.4 * s),
+          kind: 'JUMPER',
+          speed: 0.36,
+        },
+      ] satisfies EnemySpec[],
+    });
+
+    events.push({
+      atDistance: offset + 18,
+      type: 'GATE_TRIO',
+      payload: {
+        left: { op: 'ADD', value: 10 + stage * 2, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.4 } satisfies GateSpec,
+        center: { op: 'ADD', value: -11, shootable: true, shotsPerStep: Math.max(4, Math.round(4.4 * s * 0.52)) } satisfies GateSpec,
+        right: { op: 'DMG_UP', value: 24, shootable: false, shotsPerStep: 10, moveAmp: slideAmp * 0.45 } satisfies GateSpec,
+      },
+    });
+
+    maybeAppendPurpleGate(events, offset + 29, totalUnits, stage, slotCounter, slideAmp, settings);
+
+    events.push({
+      atDistance: offset + 37,
+      type: 'BARRELS',
+      payload: [
+        { x: -0.56, hp: Math.round(60 * s), kind: 'CRYO_CRATE' },
+        { x: -0.18, hp: Math.round(62 * s), kind: 'GOLD_SAFE' },
+        { x: 0.18, hp: Math.round(66 * s), kind: 'HYPER_CRATE' },
+        { x: 0.56, hp: Math.round(52 * s), kind: canSabotage ? 'WEAPON_DOWN_CRATE' : 'SQUAD_CRATE', squadBonus: 7 + stage * 2 },
+      ] satisfies BarrelSpec[],
+    });
+
+    events.push({
+      atDistance: offset + 48,
+      type: 'BARRIER',
+      payload: [{ x: 0.0, width: 1.04, hp: Math.round(160 * s), damage: dmgBase }] satisfies BarrierSpec[],
+    });
+
+    events.push({
+      atDistance: offset + 58,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: flip ? -0.5 : 0.5,
+          count: computeEnemyCount(2, offset + 58, totalUnits, stage, blockIndex * 10 + 39, 'ELITE', settings, true),
+          hpPerUnit: Math.round(25 * s),
+          kind: 'TURRET',
+          speed: 0.16,
+        },
+        {
+          x: 0.0,
+          count: computeEnemyCount(4, offset + 58, totalUnits, stage, blockIndex * 10 + 40, 'ELITE', settings, true),
+          hpPerUnit: Math.round(16 * s),
+          kind: 'SPLITTER',
+          speed: 0.3,
+        },
+      ] satisfies EnemySpec[],
+    });
+
+    maybeAppendPurpleGate(events, offset + 69, totalUnits, stage, slotCounter, slideAmp, settings);
+
+    events.push({
+      atDistance: offset + 76,
+      type: 'ENEMIES',
+      payload: [
+        {
+          x: -0.44,
+          count: computeEnemyCount(15, offset + 76, totalUnits, stage, blockIndex * 10 + 41, 'SWARM', settings),
+          hpPerUnit: Math.round(5.8 * s),
+          kind: 'RAIDER',
+        },
+        {
+          x: 0.44,
+          count: computeEnemyCount(14, offset + 76, totalUnits, stage, blockIndex * 10 + 42, 'SWARM', settings),
+          hpPerUnit: Math.round(5.2 * s),
+          kind: 'RUSHER',
+          speed: 0.44,
+        },
+      ] satisfies EnemySpec[],
+    });
   }
 
   // === Innovatieve situaties (frequentie via settings.specialSituations) ===
@@ -1064,9 +1258,13 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   const variant = stage % 3;
   const slotCounter = { next: 0, lastPurpleAt: -100 };
 
-  // === ACT 1: OPENING & ESCALATION (0 -> 94) ===
+  // === ACT 1: OPENING & ESCALATION (0 -> 94), wisselende volgorde vanaf stage 2 ===
+  const openingGateDist = stage >= 2 && variant === 1 ? 18 : stage >= 2 && variant === 2 ? 23 : 4;
+  const openingBarrelsDist = stage >= 2 && variant === 1 ? 26 : stage >= 2 && variant === 2 ? 7 : 12;
+  const openingEnemiesDist = stage >= 2 && variant === 1 ? 6 : stage >= 2 && variant === 2 ? 15 : 21;
+
   events.push({
-    atDistance: 4,
+    atDistance: openingGateDist,
     type: 'GATE_PAIR',
     payload: {
       left: { op: 'MYSTERY', value: 0, shootable: false, shotsPerStep: 6 } satisfies GateSpec,
@@ -1080,7 +1278,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   });
 
   events.push({
-    atDistance: 12,
+    atDistance: openingBarrelsDist,
     type: 'BARRELS',
     payload: [
       { x: -0.54, hp: Math.round(18 * hpScale), kind: 'GOLD_SAFE' },
@@ -1090,20 +1288,20 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   });
 
   events.push({
-    atDistance: 21,
+    atDistance: openingEnemiesDist,
     type: 'ENEMIES',
     payload:
       variant === 0
         ? [
             {
               x: -0.45,
-              count: computeEnemyCount(6, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
+              count: computeEnemyCount(6, openingEnemiesDist, lenCfg.units, stage, 1, 'SCOUT', settings),
               hpPerUnit: Math.round(5.4 * hpScale),
               kind: 'RAIDER',
             },
             {
               x: 0.45,
-              count: computeEnemyCount(8, 21, lenCfg.units, stage, 2, 'STANDARD', settings),
+              count: computeEnemyCount(8, openingEnemiesDist, lenCfg.units, stage, 2, 'STANDARD', settings),
               hpPerUnit: Math.round(5.4 * hpScale),
               kind: 'RAIDER',
             },
@@ -1112,14 +1310,14 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
           ? [
               {
                 x: -0.25,
-                count: computeEnemyCount(9, 21, lenCfg.units, stage, 1, 'STANDARD', settings),
+                count: computeEnemyCount(9, openingEnemiesDist, lenCfg.units, stage, 1, 'STANDARD', settings),
                 hpPerUnit: Math.round(4.6 * hpScale),
                 kind: 'RUSHER',
                 speed: 0.42,
               },
               {
                 x: 0.42,
-                count: computeEnemyCount(3, 21, lenCfg.units, stage, 2, 'SCOUT', settings),
+                count: computeEnemyCount(3, openingEnemiesDist, lenCfg.units, stage, 2, 'SCOUT', settings),
                 hpPerUnit: Math.round(6.2 * hpScale),
                 kind: 'BOMBER',
                 speed: 0.36,
@@ -1128,13 +1326,13 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
           : [
               {
                 x: -0.46,
-                count: computeEnemyCount(5, 21, lenCfg.units, stage, 1, 'SCOUT', settings),
+                count: computeEnemyCount(5, openingEnemiesDist, lenCfg.units, stage, 1, 'SCOUT', settings),
                 hpPerUnit: Math.round(5.4 * hpScale),
                 kind: 'RAIDER',
               },
               {
                 x: 0.46,
-                count: computeEnemyCount(3, 21, lenCfg.units, stage, 2, 'ELITE', settings, true),
+                count: computeEnemyCount(3, openingEnemiesDist, lenCfg.units, stage, 2, 'ELITE', settings, true),
                 hpPerUnit: Math.round(18 * hpScale),
                 kind: 'BRUTE',
               },
@@ -1326,23 +1524,26 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   const finalScale = hpScale * (1 + finalScaleBonus);
   const finalBarrierDmg = Math.max(2, Math.round((7 + stage * 1.2) * Math.sqrt(settings.enemyHpMult)));
 
+  const finalVariant = stage >= 2 ? (stage + extraMiddleBlocks) % 2 : 0;
+  const finalCanSabotage = stage >= 2 && specialChance(settings) > 0;
+
   events.push({
-    atDistance: finalOffset + 4,
+    atDistance: finalOffset + (finalVariant === 1 ? 30 : 4),
     type: 'BARRELS',
     payload: [
       { x: -0.52, hp: Math.round(56 * finalScale), kind: 'SQUAD_CRATE', squadBonus: 8 + stage * 2 },
       { x: 0.0, hp: Math.round(80 * finalScale), kind: 'WEAPON_CRATE', weaponTier: 'ROCKET' },
-      { x: 0.52, hp: Math.round(58 * finalScale), kind: 'SHIELD_CRATE' },
+      { x: 0.52, hp: Math.round(58 * finalScale), kind: finalVariant === 1 && finalCanSabotage ? 'WEAPON_DOWN_CRATE' : 'SHIELD_CRATE' },
     ] satisfies BarrelSpec[],
   });
 
   events.push({
-    atDistance: finalOffset + 14,
+    atDistance: finalOffset + (finalVariant === 1 ? 5 : 14),
     type: 'BARRIER',
     payload: [{ x: variant === 2 ? -0.45 : 0.45, width: 0.92, hp: Math.round(150 * finalScale), damage: finalBarrierDmg }] satisfies BarrierSpec[],
   });
   events.push({
-    atDistance: finalOffset + 22,
+    atDistance: finalOffset + (finalVariant === 1 ? 13 : 22),
     type: 'BARRIER',
     payload: [{ x: variant === 2 ? 0.45 : -0.45, width: 0.92, hp: Math.round(150 * finalScale), damage: finalBarrierDmg }] satisfies BarrierSpec[],
   });
@@ -1350,7 +1551,7 @@ export function generateStageEvents(stage: number, settings: GameplaySettings): 
   maybeAppendPurpleGate(events, finalOffset + 28, lenCfg.units, stage, slotCounter, slideAmp, settings);
 
   events.push({
-    atDistance: finalOffset + 32,
+    atDistance: finalOffset + (finalVariant === 1 ? 21 : 32),
     type: 'BARRELS',
     payload: [
       { x: -0.58, hp: Math.round(62 * finalScale), kind: 'GOLD_SAFE' },

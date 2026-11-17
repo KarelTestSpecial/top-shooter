@@ -17,14 +17,14 @@ Snelle 2.5D arcade lane-shooter gebaseerd op de directe actie uit mobiele game-r
   - **Doelwitlaser-scans**: vijandelijke satellietlasers markeren een baan en slaan na een korte waarschuwing toe.
 - **Tonnen, Kratten & TNT**:
   - **TNT-vaten**: Ontploffen in een grote kettingreactie (ruime blastradius) en schakelen omliggende vijanden en tonnen uit.
-  - **Wapenkisten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun, Raketwerper en doorborend Plasmakanon.
+  - **Wapenkisten & Sabotage-kratten**: Live upgrades van Rifle naar Dubbel-SMG, 3-Way Shotgun, Raketwerper en doorborend Plasmakanon — pas op voor rode **Sabotage-kratten (`WAPEN ▼`)**, die je wapen juist een tier verlagen als je ze kapotschiet of raakt!
   - **Schild- & Dronekratten**: Voeg beschermende energieschilden en flankerende aanvalsdrones toe. Drones zijn kwetsbaar: vijandelijk vuur kan ze raken en vernietigen.
   - **Cryo-, Hyper- & Tesla-kratten**: Vertraag alle vijanden, laad je hypervuur op of ontketen een bliksemketting die met de stage meer vijanden raakt (tot 10) over een ruimere straal.
   - **Goudkluizen**: Grote goudbeloningen voor wie de tijd neemt om ze open te breken.
 - **Barricades**: versperringen op de brug — schiet ze op tijd neer of je squad verliest soldaten.
-- **Vijanden**: rushers, raiders, turrets, brutes en bommers, plus sluipschutters met lang bereik en splitters die bij hun dood in twee groepen uiteenvallen.
+- **Vijanden**: rushers, raiders, turrets, brutes en bommers, plus sluipschutters met lang bereik en splitters die bij hun dood in twee groepen uiteenvallen. Op hogere stages wisselen de formaties, volgorde van blokken en aanvalspatronen voortdurend.
 - **Combo-Streak & Hypervuur**: Snelle eliminaties bouwen je Combo op voor hogere kritieke trefferkans en laden Hypervuur op (`2×` goud en extra vuursnelheid).
-- **Afwisselende Biomes & Eindbazen**: Wisselt tussen *Kustbrug*, *Woestijnkloof* en *Nacht-Reactor*, elk afgesloten door een eindbaas (tank, heli, mech of carrier) met een Woede-Fase onder 55% HP.
+- **Afwisselende Biomes & Eindbazen**: Wisselt tussen *Kustbrug*, *Woestijnkloof* en *Nacht-Reactor*, elk afgesloten door een eindbaas (tank, heli, mech of carrier) met een Woede-Fase onder 55% HP. Verslagen mini-bazen hebben bovendien een kans op een laatste noodontploffing die je moet ontwijken.
 - **Directe Upgrades**: Besteed goud tussen rondes direct aan **Start-Squad**, **Vuurkracht**, **Vuursnelheid** en **Goudbonus**, of laat de **Verdeel goud**-knop het hele bedrag in één keer over de vier categorieën spreiden. De standaardverdeling is gelijk (25/25/25/25); met de **verdeelsleutel** stel je zelf de relatieve gewichten in (bv. 50/20/20/10). Wat per categorie niet koopbaar is, schuift door naar de goedkoopste beschikbare upgrade.
 - **3 Opslag-slots & Clean Slate**: Sla je volledige spelersstatus (goud, upgrades, record, hoogste stage, kills en instellingen) op in één van de 3 slots, laad een status later terug, of begin met een **clean slate** (de slots blijven bewaard).
 

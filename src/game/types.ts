@@ -103,7 +103,8 @@ export type CrateReward =
   | { type: 'HYPER'; charge: number }
   | { type: 'TESLA'; damage: number; chains: number }
   | { type: 'MINE'; radius: number; damage: number }
-  | { type: 'TNT'; radius: number; damage: number };
+  | { type: 'TNT'; radius: number; damage: number }
+  | { type: 'WEAPON_DOWN' };
 
 export interface BarrelEntity {
   id: number;
@@ -125,7 +126,8 @@ export interface BarrelEntity {
     | 'HYPER_CRATE'
     | 'TESLA_CRATE'
     | 'MINE'
-    | 'TNT_BARREL';
+    | 'TNT_BARREL'
+    | 'WEAPON_DOWN_CRATE';
   reward: CrateReward;
   moveAmp?: number;
   movePhase?: number;
